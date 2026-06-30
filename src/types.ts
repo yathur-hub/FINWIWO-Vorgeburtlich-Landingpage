@@ -1,5 +1,5 @@
 export type GenderType = 'Mädchen' | 'Junge' | 'Beides';
-export type StyleType = 'Klassisch' | 'Kurz' | 'Selten';
+export type StyleType = 'Klassisch' | 'Kurz' | 'Selten' | 'Modern';
 
 export interface BabyName {
   name: string;

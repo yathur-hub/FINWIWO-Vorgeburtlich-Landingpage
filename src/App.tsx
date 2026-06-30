@@ -177,8 +177,19 @@ export default function App() {
     const filtered = BABY_NAMES.filter(
       item => (nameGender === 'Beides' || item.gender === nameGender) && item.style === nameStyle
     );
-    // Shuffle filtered array
-    const shuffled = [...filtered].sort(() => 0.5 - Math.random());
+    
+    // Ensure unique names in the output
+    const unique: BabyName[] = [];
+    const seen = new Set<string>();
+    for (const item of filtered) {
+      if (!seen.has(item.name)) {
+        seen.add(item.name);
+        unique.push(item);
+      }
+    }
+
+    // Shuffle unique array
+    const shuffled = [...unique].sort(() => 0.5 - Math.random());
     setShuffledNames(shuffled.slice(0, 6));
   };
 
@@ -783,12 +794,12 @@ export default function App() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-teal-deep/70 mb-3">
                   Namen-Stil:
                 </label>
-                <div className="flex bg-cream p-1 rounded-xl gap-1">
-                  {(['Klassisch', 'Kurz', 'Selten'] as StyleType[]).map((s) => (
+                <div className="grid grid-cols-4 gap-1 bg-cream p-1 rounded-xl">
+                  {(['Klassisch', 'Modern', 'Kurz', 'Selten'] as StyleType[]).map((s) => (
                     <button
                       key={s}
                       onClick={() => setNameStyle(s)}
-                      className={`flex-1 text-center py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${nameStyle === s ? 'bg-teal text-white shadow' : 'text-teal-deep/70 hover:text-teal-deep'}`}
+                      className={`text-center py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${nameStyle === s ? 'bg-teal text-white shadow' : 'text-teal-deep/70 hover:text-teal-deep'}`}
                     >
                       {s}
                     </button>
@@ -964,10 +975,6 @@ export default function App() {
                     className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
                     referrerPolicy="no-referrer"
                   />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-teal-deep/80 via-teal-deep/20 to-transparent p-4 pt-12">
-                    <div className="text-white text-lg font-bold font-display">Alessandro Palermo</div>
-                    <div className="text-teal/40 text-xs font-semibold uppercase tracking-wider">Leiter Finanzberatung</div>
-                  </div>
                 </div>
 
                 {/* Profile Details */}
