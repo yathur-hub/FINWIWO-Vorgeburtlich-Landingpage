@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { BABY_NAMES, ZODIACS, FRUIT_SIZES, TESTIMONIALS, FAQ_ITEMS } from './data';
 import { GenderType, StyleType, BabyName, ZodiacInfo } from './types';
+import LegalModal from './components/LegalModal';
 
 // Anchor helper function
 const scrollToSection = (id: string) => {
@@ -41,6 +42,15 @@ const scrollToSection = (id: string) => {
 export default function App() {
   // --- Today's Reference Date (Fixed for Demo consistency as June 30, 2026) ---
   const today = new Date('2026-06-30');
+
+  // --- Legal Modal State ---
+  const [legalModalOpen, setLegalModalOpen] = useState<boolean>(false);
+  const [legalModalTab, setLegalModalTab] = useState<'impressum' | 'datenschutz' | null>(null);
+
+  const openLegal = (tab: 'impressum' | 'datenschutz') => {
+    setLegalModalTab(tab);
+    setLegalModalOpen(true);
+  };
 
   // --- State Variables ---
   const [calculationTab, setCalculationTab] = useState<'dueDate' | 'lastPeriod'>('dueDate');
@@ -1486,7 +1496,7 @@ export default function App() {
                             className="mt-1 w-4 h-4 text-teal border-gray-300 rounded focus:ring-teal"
                           />
                           <label htmlFor="form-consent" className="text-[11px] text-teal-deep/70 leading-relaxed cursor-pointer select-none">
-                            Ich bin einverstanden, dass FINWIWO mich zum Baby-Vorsorge-Check kontaktiert und meine Angaben gemäss der <span className="underline hover:text-teal font-semibold">Datenschutzerklärung</span> verarbeitet.
+                            Ich bin einverstanden, dass FINWIWO mich zum Baby-Vorsorge-Check kontaktiert und meine Angaben gemäss der <span className="underline hover:text-teal font-semibold cursor-pointer" onClick={() => openLegal('datenschutz')}>Datenschutzerklärung</span> verarbeitet.
                           </label>
                         </div>
 
@@ -1640,9 +1650,8 @@ export default function App() {
 
             {/* Links */}
             <div className="flex gap-6 text-sm font-semibold text-white">
-              <span className="hover:text-gold cursor-pointer transition-colors" onClick={() => alert('Impressum: FINWIWO AG, St. Gallen. Register-Nr. 35704')}>Impressum</span>
-              <span className="hover:text-gold cursor-pointer transition-colors" onClick={() => alert('Datenschutz: Deine Daten werden streng vertraulich gemäss Schweizer Bundesgesetz über den Datenschutz (DSG) behandelt.')}>Datenschutz</span>
-              <span className="hover:text-gold cursor-pointer transition-colors" onClick={() => scrollToSection('vorsorge-form')}>Kontakt</span>
+              <span className="hover:text-gold cursor-pointer transition-colors" onClick={() => openLegal('impressum')}>Impressum</span>
+              <span className="hover:text-gold cursor-pointer transition-colors" onClick={() => openLegal('datenschutz')}>Datenschutz</span>
             </div>
 
           </div>
@@ -1748,6 +1757,13 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 15. Legal Documents Modal */}
+      <LegalModal 
+        isOpen={legalModalOpen} 
+        initialTab={legalModalTab} 
+        onClose={() => setLegalModalOpen(false)} 
+      />
 
     </div>
   );
