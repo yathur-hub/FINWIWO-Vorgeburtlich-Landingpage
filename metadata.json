@@ -1,0 +1,6 @@
+{
+  "name": "FINWIWO - Vorgeburtliche Anmeldung",
+  "description": "Eine hochkonvertierende Landingpage für die vorgeburtliche Anmeldung und den kostenlosen Baby-Vorsorge-Check von FINWIWO.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
