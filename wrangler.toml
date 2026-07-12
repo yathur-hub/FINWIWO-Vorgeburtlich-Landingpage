@@ -10,3 +10,8 @@ binding = "ASSETS"
 
 [vars]
 CLEVA_API_URL = "https://tljnviuangepiueitric.supabase.co/functions/v1/lead-import"
+
+[[routes]]
+pattern = "vorgeburtlich.ch"
+custom_domain = true
+
