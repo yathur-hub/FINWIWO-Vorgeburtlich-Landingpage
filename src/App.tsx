@@ -423,14 +423,67 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       
-      if (!response.ok) {
-        throw new Error(`API-Fehler: ${response.status}`);
+      const responseText = await response.text();
+      let responseData: Record<string, unknown> = {};
+      
+      if (responseText) {
+        try {
+          responseData = JSON.parse(responseText);
+        } catch {
+          responseData = {
+            rawResponse: responseText,
+          };
+        }
       }
       
+      if (!response.ok) {
+        console.error("API-Formularübermittlung fehlgeschlagen", {
+          status: response.status,
+          statusText: response.statusText,
+          response: responseData,
+        });
+
+        const serverMessage =
+          typeof responseData.error === 'string'
+            ? responseData.error
+            : `API-Fehler: ${response.status}`;
+
+        const diagnosticStage =
+          typeof responseData.diagnosticStage === 'string'
+            ? responseData.diagnosticStage
+            : null;
+
+        const diagnosticCode =
+          typeof responseData.diagnosticCode === 'string'
+            ? responseData.diagnosticCode
+            : null;
+
+        const diagnosticMessage =
+          typeof responseData.diagnosticMessage === 'string'
+            ? responseData.diagnosticMessage
+            : null;
+
+        throw new Error(
+          [
+            serverMessage,
+            diagnosticStage ? `Stufe: ${diagnosticStage}` : null,
+            diagnosticCode ? `Code: ${diagnosticCode}` : null,
+            diagnosticMessage ? `Details: ${diagnosticMessage}` : null,
+          ]
+            .filter(Boolean)
+            .join(" | ")
+        );
+      }
+      
+      console.log("API-Formularübermittlung erfolgreich", {
+        status: response.status,
+      });
+
       setSubmitStatus('success');
       setFormSubmitted(true);
-    } catch (error: any) {
-      console.error('Fehler bei der API-Formularübermittlung:', error.message || error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Fehler bei der API-Formularübermittlung:', errorMessage);
       setSubmitStatus('error');
     }
   };
