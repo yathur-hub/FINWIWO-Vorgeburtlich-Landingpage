@@ -1,3 +1,12 @@
+interface Env {
+  CLEVA_API_KEY: string;
+  CLEVA_API_URL: string;
+  CLEVA_SUPABASE_ANON_KEY: string;
+  ASSETS: {
+    fetch: typeof fetch;
+  };
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -5,7 +14,7 @@ const corsHeaders = {
 };
 
 export default {
-  async fetch(request: Request, env: any, ctx: any): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: unknown): Promise<Response> {
     const url = new URL(request.url);
 
     // 1. Handle CORS Preflight request
@@ -18,15 +27,16 @@ export default {
 
     // 2. Routing for lead import API
     if (url.pathname === "/api/lead-import") {
+      console.log("Worker-Route erreicht: POST /api/lead-import");
+
       // 405 Method Not Allowed if not POST
       if (request.method !== "POST") {
-        return new Response(
-          JSON.stringify({ error: `Method ${request.method} Not Allowed` }),
+        return Response.json(
+          { error: `Method ${request.method} Not Allowed` },
           {
             status: 405,
             headers: {
               ...corsHeaders,
-              "Content-Type": "application/json",
               "Allow": "POST",
             },
           }
@@ -34,27 +44,30 @@ export default {
       }
 
       try {
-        let payload: any;
+        let payload: unknown;
         try {
           payload = await request.json();
         } catch (e) {
-          return new Response(
-            JSON.stringify({ error: "Ungültiges JSON-Format im Payload." }),
+          return Response.json(
+            { error: "Ungültiges JSON-Format im Payload." },
             {
               status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: corsHeaders,
             }
           );
         }
 
-        // Log receipt of lead without exposing personal details (PII)
-        console.log("Lead received for proxying in Worker:", {
-          formularname: payload?.formularname,
-          quelle: payload?.quelle,
-          beratungsart: payload?.beratungsart,
-          anrede: payload?.anrede,
-          wohnort_kanton: payload?.wohnort_kanton,
-        });
+        if (typeof payload !== "object" || payload === null) {
+          return Response.json(
+            { error: "Ungültiges JSON-Format im Payload." },
+            {
+              status: 400,
+              headers: corsHeaders,
+            }
+          );
+        }
+
+        const payloadObj = payload as Record<string, unknown>;
 
         // Server-side validation of mandatory fields
         const requiredFields = [
@@ -70,117 +83,127 @@ export default {
         ];
 
         const missingFields = requiredFields.filter(
-          field => payload[field] === undefined || payload[field] === null || payload[field] === ""
+          field => payloadObj[field] === undefined || payloadObj[field] === null || payloadObj[field] === ""
         );
 
         if (missingFields.length > 0) {
           console.warn(`Validation failed in Worker: missing fields [${missingFields.join(", ")}]`);
-          return new Response(
-            JSON.stringify({
+          return Response.json(
+            {
               error: `Bitte fülle alle Pflichtfelder aus. Fehlende Felder: ${missingFields.join(", ")}`
-            }),
+            },
             {
               status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: corsHeaders,
             }
           );
         }
 
         // Ensure datenschutz_akzeptiert is true
-        if (payload.datenschutz_akzeptiert !== true) {
-          return new Response(
-            JSON.stringify({
+        if (payloadObj.datenschutz_akzeptiert !== true) {
+          return Response.json(
+            {
               error: "Die Datenschutzerklärung muss zwingend akzeptiert werden."
-            }),
+            },
             {
               status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: corsHeaders,
             }
           );
         }
 
-        // Retrieve API Key from env
+        console.log("Payload validiert");
+
+        // Retrieve config from env
         const apiKey = env.CLEVA_API_KEY;
-        if (!apiKey) {
-          console.error("CLEVA_API_KEY is not defined in Cloudflare environment variables!");
-          return new Response(
-            JSON.stringify({
-              error: "Server-Konfigurationsfehler: API-Schlüssel fehlt."
-            }),
+        const apiUrl = env.CLEVA_API_URL;
+        const supabaseAnonKey = env.CLEVA_SUPABASE_ANON_KEY;
+
+        if (!apiKey || !apiUrl || !supabaseAnonKey) {
+          console.error("Cleva Worker configuration missing", {
+            apiKeyPresent: Boolean(apiKey),
+            apiUrlPresent: Boolean(apiUrl),
+            supabaseAnonKeyPresent: Boolean(supabaseAnonKey),
+          });
+
+          return Response.json(
+            {
+              error: "Server-Konfigurationsfehler."
+            },
             {
               status: 500,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: corsHeaders,
             }
           );
         }
 
-        // Send payload to Cleva Endpoint
-        const clevaEndpoint = "https://tljnviuangepiueitric.supabase.co/functions/v1/lead-import";
-        const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRsam52aXVhbmdlcGl1ZWl0cmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY1Mzc0MDQsImV4cCI6MjA3MjExMzQwNH0.Llo0_TLLlqoJfRA6DMWiRM5lx4m6-zISdh1hkloGidg";
+        const clevaPayload = { data: payloadObj };
 
-        console.log("Worker forwarding lead to Cleva endpoint...");
+        console.log("Cleva-Request gestartet");
 
-        const crmResponse = await fetch(clevaEndpoint, {
+        const crmResponse = await fetch(apiUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "apikey": supabaseAnonKey,
             "x-api-key": apiKey
           },
-          body: JSON.stringify({ data: payload })
+          body: JSON.stringify(clevaPayload)
         });
 
+        console.log("Cleva-Status erhalten:", crmResponse.status);
+
+        const responseText = await crmResponse.text();
+
         if (!crmResponse.ok) {
-          const errorMsg = `CRM-API-Fehler: ${crmResponse.status}`;
-          try {
-            const errBody = await crmResponse.text();
-            console.error(`Cleva API Error response inside Worker: ${errBody}`);
-          } catch (_) {}
-          
-          return new Response(
-            JSON.stringify({
-              error: "Die Anmeldung konnte leider nicht übermittelt werden (CRM API Fehler)."
-            }),
+          console.error("Cleva CRM Error status received:", crmResponse.status);
+          console.error("Cleva CRM Error category:", crmResponse.status >= 500 ? "Server Error" : "Client Error");
+          console.error("Cleva CRM Error response length:", responseText ? responseText.length : 0);
+
+          return Response.json(
             {
-              status: 502, // Bad Gateway when downstream API rejects request
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              error: "Die Anmeldung konnte leider nicht übermittelt werden (CRM API Fehler)."
+            },
+            {
+              status: 502,
+              headers: corsHeaders,
             }
           );
         }
 
         // Safe parsing of response text/JSON from CRM
-        const responseText = await crmResponse.text();
-        let responseData = {};
+        let responseData: unknown = {};
         if (responseText) {
           try {
             responseData = JSON.parse(responseText);
           } catch (e) {
-            console.warn("Could not parse response from Cleva as JSON inside Worker:", responseText);
-            responseData = { text: responseText };
+            console.warn("Could not parse response from Cleva as JSON inside Worker, response length:", responseText.length);
+            responseData = { text: "Non-JSON Response" };
           }
         }
 
         console.log("Lead successfully forwarded to Cleva API from Worker!");
-        return new Response(
-          JSON.stringify({
+        return Response.json(
+          {
             success: true,
             data: responseData
-          }),
+          },
           {
             status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: corsHeaders,
           }
         );
 
-      } catch (error: any) {
-        console.error("Internal Error during lead forwarding in Worker:", error.message || error);
-        return new Response(
-          JSON.stringify({
-            error: "Die Anmeldung konnte leider nicht übermittelt werden. Bitte versuche es erneut oder kontaktiere uns direkt."
-          }),
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("Internal Error during lead forwarding in Worker:", errorMessage);
+        return Response.json(
           {
-            status: 500, // Internal Server Error
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            error: "Die Anmeldung konnte leider nicht übermittelt werden. Bitte versuche es erneut oder kontaktiere uns direkt."
+          },
+          {
+            status: 500,
+            headers: corsHeaders,
           }
         );
       }
