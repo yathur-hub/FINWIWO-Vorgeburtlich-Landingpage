@@ -882,7 +882,7 @@ export default function App() {
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
               <button
                 onClick={() => scrollToSection('vorteile')}
-                className="bg-coral hover:bg-coral/90 text-white font-bold text-base py-4 px-8 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5 cursor-pointer"
+                className="w-full sm:w-auto bg-coral hover:bg-coral/90 text-white font-bold text-sm sm:text-base py-3.5 sm:py-4 px-6 sm:px-8 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5 cursor-pointer"
                 id="hero-secondary-cta"
               >
                 Was dein Baby bekommt <ArrowRight className="w-5 h-5" />
@@ -1241,7 +1241,7 @@ export default function App() {
             <div className="text-center pt-2 space-y-4">
               <button
                 onClick={handleChecklistCta}
-                className="inline-flex bg-teal hover:bg-teal/90 text-white font-bold py-3.5 px-8 rounded-full shadow-md hover:shadow-lg transition-all items-center gap-2 cursor-pointer text-sm"
+                className="w-full sm:w-auto inline-flex justify-center bg-teal hover:bg-teal/90 text-white font-bold py-3.5 px-4 sm:px-8 rounded-full shadow-md hover:shadow-lg transition-all items-center gap-2 cursor-pointer text-xs sm:text-sm"
                 id="checklist-cta"
               >
                 Komplette 40-Wochen-Checkliste per E-Mail <Mail className="w-4 h-4" />
@@ -1300,7 +1300,7 @@ export default function App() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-teal-deep/70 mb-3">
                   Namen-Stil:
                 </label>
-                <div className="grid grid-cols-4 gap-1 bg-cream p-1 rounded-xl">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 bg-cream p-1 rounded-xl">
                   {(['Klassisch', 'Modern', 'Kurz', 'Selten'] as StyleType[]).map((s) => (
                     <button
                       key={s}
@@ -1336,7 +1336,7 @@ export default function App() {
             <div className="text-center pt-4">
               <button
                 onClick={handleShuffleNames}
-                className="bg-coral hover:bg-coral/90 text-white font-bold py-3 px-8 rounded-full shadow-md hover:shadow-lg transition-all inline-flex items-center gap-2 text-sm cursor-pointer"
+                className="w-full sm:w-auto inline-flex justify-center bg-coral hover:bg-coral/90 text-white font-bold py-3 px-4 sm:px-8 rounded-full shadow-md hover:shadow-lg transition-all items-center gap-2 text-xs sm:text-sm cursor-pointer"
                 id="name-shuffle-btn"
               >
                 <RefreshCw className="w-4 h-4 animate-spin-slow" /> Neue Vorschläge

@@ -80,29 +80,29 @@ export default function LegalModal({ isOpen, initialTab, onClose }: LegalModalPr
             </div>
 
             {/* Tab Buttons */}
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 onClick={() => setActiveTab('impressum')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all cursor-pointer border ${
+                className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer border ${
                   activeTab === 'impressum'
                     ? 'bg-teal-deep text-white border-teal-deep shadow-sm'
                     : 'bg-white hover:bg-cream-dark text-teal-deep border-teal-deep/10'
                 }`}
                 id="tab-impressum"
               >
-                <Info className="w-4 h-4" />
+                <Info className="w-4 h-4 shrink-0" />
                 <span>Impressum &amp; Disclaimer</span>
               </button>
               <button
                 onClick={() => setActiveTab('datenschutz')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all cursor-pointer border ${
+                className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer border ${
                   activeTab === 'datenschutz'
                     ? 'bg-teal-deep text-white border-teal-deep shadow-sm'
                     : 'bg-white hover:bg-cream-dark text-teal-deep border-teal-deep/10'
                 }`}
                 id="tab-datenschutz"
               >
-                <Shield className="w-4 h-4" />
+                <Shield className="w-4 h-4 shrink-0" />
                 <span>Datenschutzerklärung</span>
               </button>
             </div>
