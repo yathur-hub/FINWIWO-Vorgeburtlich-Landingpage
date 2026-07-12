@@ -42,7 +42,7 @@ export default {
           : "";
 
       return Response.json({
-        workerVersion: "runtime-config-diagnostic-v1",
+        workerVersion: "runtime-config-diagnostic-v2",
         apiKeyPresent: apiKey.length > 0,
         apiUrlPresent: apiUrl.length > 0,
         supabaseAnonKeyPresent: supabaseAnonKey.length > 0,
@@ -208,13 +208,31 @@ export default {
         const responseText = await crmResponse.text();
 
         if (!crmResponse.ok) {
-          console.error("Cleva CRM Error status received:", crmResponse.status);
-          console.error("Cleva CRM Error category:", crmResponse.status >= 500 ? "Server Error" : "Client Error");
-          console.error("Cleva CRM Error response length:", responseText ? responseText.length : 0);
+          let upstreamError: unknown = null;
+
+          if (responseText) {
+            try {
+              upstreamError = JSON.parse(responseText);
+            } catch {
+              upstreamError = {
+                responseType: "non-json",
+                responseLength: responseText.length,
+              };
+            }
+          }
+
+          console.error("Cleva CRM request rejected", {
+            upstreamStatus: crmResponse.status,
+            upstreamStatusText: crmResponse.statusText,
+            upstreamError,
+          });
 
           return Response.json(
             {
-              error: "Die Anmeldung konnte leider nicht übermittelt werden (CRM API Fehler)."
+              error: "Die Anmeldung konnte leider nicht übermittelt werden (CRM API Fehler).",
+              upstreamStatus: crmResponse.status,
+              upstreamStatusText: crmResponse.statusText,
+              upstreamError,
             },
             {
               status: 502,

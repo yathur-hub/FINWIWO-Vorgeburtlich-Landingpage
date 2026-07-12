@@ -9,4 +9,4 @@ directory = "./dist"
 binding = "ASSETS"
 
 [vars]
-CLEVA_API_URL = "https://my.broker.cleva.ch/functions/v1/lead-import"
+CLEVA_API_URL = "https://tljnviuangepiueitric.supabase.co/functions/v1/lead-import"
