@@ -25,6 +25,36 @@ export default {
       });
     }
 
+    if (url.pathname === "/api/config-check" && request.method === "GET") {
+      const apiKey =
+        typeof env.CLEVA_API_KEY === "string"
+          ? env.CLEVA_API_KEY.trim()
+          : "";
+
+      const apiUrl =
+        typeof env.CLEVA_API_URL === "string"
+          ? env.CLEVA_API_URL.trim()
+          : "";
+
+      const supabaseAnonKey =
+        typeof env.CLEVA_SUPABASE_ANON_KEY === "string"
+          ? env.CLEVA_SUPABASE_ANON_KEY.trim()
+          : "";
+
+      return Response.json({
+        workerVersion: "runtime-config-diagnostic-v1",
+        apiKeyPresent: apiKey.length > 0,
+        apiUrlPresent: apiUrl.length > 0,
+        supabaseAnonKeyPresent: supabaseAnonKey.length > 0,
+        apiUrlValid:
+          apiUrl.startsWith("https://") &&
+          apiUrl.includes("/functions/v1/lead-import"),
+        apiUrlLength: apiUrl.length,
+      }, {
+        headers: corsHeaders
+      });
+    }
+
     // 2. Routing for lead import API
     if (url.pathname === "/api/lead-import") {
       console.log("Worker-Route erreicht: POST /api/lead-import");
@@ -115,20 +145,42 @@ export default {
         console.log("Payload validiert");
 
         // Retrieve config from env
-        const apiKey = env.CLEVA_API_KEY;
-        const apiUrl = env.CLEVA_API_URL;
-        const supabaseAnonKey = env.CLEVA_SUPABASE_ANON_KEY;
+        const apiKey =
+          typeof env.CLEVA_API_KEY === "string"
+            ? env.CLEVA_API_KEY.trim()
+            : "";
 
-        if (!apiKey || !apiUrl || !supabaseAnonKey) {
-          console.error("Cleva Worker configuration missing", {
-            apiKeyPresent: Boolean(apiKey),
-            apiUrlPresent: Boolean(apiUrl),
-            supabaseAnonKeyPresent: Boolean(supabaseAnonKey),
-          });
+        const apiUrl =
+          typeof env.CLEVA_API_URL === "string"
+            ? env.CLEVA_API_URL.trim()
+            : "";
 
+        const supabaseAnonKey =
+          typeof env.CLEVA_SUPABASE_ANON_KEY === "string"
+            ? env.CLEVA_SUPABASE_ANON_KEY.trim()
+            : "";
+
+        const runtimeConfig = {
+          apiKeyPresent: apiKey.length > 0,
+          apiUrlPresent: apiUrl.length > 0,
+          supabaseAnonKeyPresent: supabaseAnonKey.length > 0,
+          apiUrlValid:
+            apiUrl.startsWith("https://") &&
+            apiUrl.includes("/functions/v1/lead-import"),
+        };
+
+        console.log("Cleva Runtime Configuration Check", runtimeConfig);
+
+        if (
+          !runtimeConfig.apiKeyPresent ||
+          !runtimeConfig.apiUrlPresent ||
+          !runtimeConfig.supabaseAnonKeyPresent ||
+          !runtimeConfig.apiUrlValid
+        ) {
           return Response.json(
             {
-              error: "Server-Konfigurationsfehler."
+              error: "Server-Konfigurationsfehler.",
+              runtimeConfig,
             },
             {
               status: 500,
