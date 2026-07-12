@@ -435,37 +435,6 @@ export default function App() {
     }
   };
 
-  // --- Exit Intent Trigger ---
-  const [showExitIntent, setShowExitIntent] = useState<boolean>(false);
-  const exitIntentTriggered = useRef<boolean>(false);
-
-  useEffect(() => {
-    const handleMouseLeave = (e: MouseEvent) => {
-      // Trigger if cursor leaves upper viewport
-      if (e.clientY < 50 && !exitIntentTriggered.current) {
-        setShowExitIntent(true);
-        exitIntentTriggered.current = true;
-      }
-    };
-
-    // Trigger on scroll percentage on mobile
-    const handleScroll = () => {
-      const scrolled = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight);
-      if (scrolled > 0.75 && !exitIntentTriggered.current) {
-        setShowExitIntent(true);
-        exitIntentTriggered.current = true;
-      }
-    };
-
-    document.addEventListener('mouseleave', handleMouseLeave);
-    window.addEventListener('scroll', handleScroll);
-
-    return () => {
-      document.removeEventListener('mouseleave', handleMouseLeave);
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
   const renderForm = (isModal: boolean = false) => {
     return (
       <div className="text-teal-deep text-left relative">
@@ -1892,67 +1861,6 @@ export default function App() {
         </button>
       </div>
 
-      {/* 16. Exit-Hinweis / Dezenter Reminder */}
-      {showExitIntent && (
-        <div className="fixed inset-0 bg-teal-deep/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative border border-teal/10 text-teal-deep text-center space-y-6">
-            
-            {/* Close Button */}
-            <button 
-              onClick={() => setShowExitIntent(false)}
-              className="absolute top-4 right-4 text-teal-deep/50 hover:text-teal-deep transition-colors p-1 rounded-full hover:bg-cream"
-              id="exit-modal-close"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {/* Icon */}
-            <div className="w-16 h-16 rounded-full bg-coral/10 text-coral flex items-center justify-center mx-auto shadow-sm">
-              <Sparkles className="w-8 h-8" />
-            </div>
-
-            {/* Copy */}
-            <div className="space-y-2">
-              <h3 className="text-2xl font-black font-display text-teal-deep">
-                Nicht verpassen, bevor es zu spät ist!
-              </h3>
-              <p className="text-sm leading-relaxed text-teal-deep/85">
-                Wusstest du, dass Zusatzversicherungen für Babys <strong>nur vor der Geburt</strong> garantiert ohne jede Gesundheitsprüfung abgeschlossen werden können? 
-                <br /><br />
-                Sichere deinem Liebling den bestmöglichen Versicherungsschutz für Zähne, Spital (privat/halbprivat) und Alternativmedizin völlig stressfrei.
-              </p>
-            </div>
-
-            {/* Action buttons inside Modal */}
-            <div className="space-y-3 pt-2">
-              <button
-                onClick={() => {
-                  setShowExitIntent(false);
-                  setFormModalOpen(true);
-                }}
-                className="w-full bg-coral hover:bg-coral/95 text-white font-bold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all cursor-pointer text-sm uppercase tracking-wider"
-                id="exit-modal-primary"
-              >
-                Kostenlosen Check anfordern
-              </button>
-              
-              <button
-                onClick={() => setShowExitIntent(false)}
-                className="w-full bg-cream hover:bg-cream/80 text-teal-deep font-bold py-3 rounded-full transition-all cursor-pointer text-xs"
-                id="exit-modal-secondary"
-              >
-                Vielleicht später vergleichen
-              </button>
-            </div>
-
-            {/* Note */}
-            <p className="text-[10px] text-teal-deep/50 italic">
-              * Völlig kostenlos, neutral und unverbindlich für alle Kassen in der Schweiz.
-            </p>
-
-          </div>
-        </div>
-      )}
 
       {/* 15. Legal Documents Modal */}
       <LegalModal 
