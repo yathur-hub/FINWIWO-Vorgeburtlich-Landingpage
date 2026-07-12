@@ -46,6 +46,7 @@ export default function App() {
   // --- Legal Modal State ---
   const [legalModalOpen, setLegalModalOpen] = useState<boolean>(false);
   const [legalModalTab, setLegalModalTab] = useState<'impressum' | 'datenschutz' | null>(null);
+  const [formModalOpen, setFormModalOpen] = useState<boolean>(false);
 
   const openLegal = (tab: 'impressum' | 'datenschutz') => {
     setLegalModalTab(tab);
@@ -222,6 +223,8 @@ export default function App() {
   // --- Form State ---
   const [formStep, setFormStep] = useState<1 | 2>(1);
   const [formSubmitted, setFormSubmitted] = useState<boolean>(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   
   // Form fields
   const [conType, setConType] = useState<'Telefon' | 'Video-Call' | 'Persönlich'>('Telefon');
@@ -236,7 +239,56 @@ export default function App() {
   const [ort, setOrt] = useState<string>('');
   const [message, setMessage] = useState<string>('');
   const [consent, setConsent] = useState<boolean>(false);
+  const [marketingEinwilligung, setMarketingEinwilligung] = useState<boolean>(false);
   const [checklistRequested, setChecklistRequested] = useState<boolean>(false);
+
+  // --- Tracking capture on mount ---
+  interface TrackingData {
+    utm_quelle: string | null;
+    utm_medium: string | null;
+    utm_kampagne: string | null;
+    utm_inhalt: string | null;
+    utm_suchbegriff: string | null;
+    gclid: string | null;
+    fbclid: string | null;
+    einstiegsseite: string;
+    verweisende_seite: string | null;
+  }
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('lead_tracking');
+      if (!stored) {
+        const params = new URLSearchParams(window.location.search);
+        const tracking: TrackingData = {
+          utm_quelle: params.get('utm_source') || null,
+          utm_medium: params.get('utm_medium') || null,
+          utm_kampagne: params.get('utm_campaign') || null,
+          utm_inhalt: params.get('utm_content') || null,
+          utm_suchbegriff: params.get('utm_term') || null,
+          gclid: params.get('gclid') || null,
+          fbclid: params.get('fbclid') || null,
+          einstiegsseite: window.location.href,
+          verweisende_seite: document.referrer || null,
+        };
+        sessionStorage.setItem('lead_tracking', JSON.stringify(tracking));
+      }
+    } catch (e) {
+      console.error('Fehler beim Speichern der Tracking-Parameter:', e);
+    }
+  }, []);
+
+  // --- Telefonnummer normalisieren ---
+  const normalizePhone = (rawPhone: string): string => {
+    let cleaned = rawPhone.replace(/[\s()\-]/g, '');
+    if (cleaned.startsWith('0') && !cleaned.startsWith('00')) {
+      cleaned = '+41' + cleaned.substring(1);
+    }
+    if (cleaned.startsWith('0041')) {
+      cleaned = '+41' + cleaned.substring(4);
+    }
+    return cleaned;
+  };
 
   // Trigger from SSW checklist CTA
   const handleChecklistCta = () => {
@@ -249,35 +301,138 @@ export default function App() {
     }
   };
 
-  // Next step in form
+  // Next step in form (with Step 1 Validation)
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
+    const errors: Record<string, string> = {};
+    
+    if (!conType) {
+      errors.beratungsart = 'Bitte wähle eine Beratungsart aus.';
+    }
+    if (!dueDateString) {
+      errors.voraussichtlicher_geburtstermin = 'Bitte gib den voraussichtlichen Geburtstermin an.';
+    }
     if (!userEmail) {
-      alert('Bitte trage eine gültige E-Mail-Adresse ein.');
+      errors.email = 'Bitte trage eine gültige E-Mail-Adresse ein.';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       return;
     }
+    
+    setFormErrors({});
     setFormStep(2);
   };
 
-  // Handle final form submit
-  const handleFormSubmit = (e: React.FormEvent) => {
+  // Handle final form submit (with Step 2 Validation and API Proxy submission)
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (conType === 'Persönlich') {
-      if (!vorname || !nachname || !phone || !strasse || !plz || !ort) {
-        alert('Bitte fülle alle Pflichtfelder aus (inklusive Strasse, PLZ und Ort).');
-        return;
-      }
+    const errors: Record<string, string> = {};
+    setSubmitStatus('idle');
+    
+    if (!anrede) {
+      errors.anrede = 'Bitte wähle eine Anrede aus.';
+    }
+    if (!vorname.trim()) {
+      errors.vorname = 'Bitte gib deinen Vornamen an.';
+    }
+    if (!nachname.trim()) {
+      errors.nachname = 'Bitte gib deinen Namen an.';
+    }
+    
+    if (!phone.trim()) {
+      errors.telefonnummer = 'Bitte gib eine gültige Telefonnummer an.';
     } else {
-      if (!vorname || !nachname || !phone || !location) {
-        alert('Bitte fülle alle Pflichtfelder aus.');
-        return;
+      const normalized = normalizePhone(phone);
+      if (normalized.length < 9) {
+        errors.telefonnummer = 'Bitte gib eine gültige Telefonnummer an.';
       }
     }
+    
+    if (conType === 'Persönlich') {
+      if (!strasse.trim()) errors.strasse = 'Bitte gib deine Strasse und Hausnummer an.';
+      if (!plz.trim()) errors.plz = 'Bitte gib deine PLZ an.';
+      if (!ort.trim()) errors.ort = 'Bitte gib deinen Ort an.';
+    } else {
+      if (!location.trim()) {
+        errors.wohnort_kanton = 'Bitte gib deinen Wohnort oder Kanton an.';
+      }
+    }
+    
     if (!consent) {
-      alert('Bitte stimme den Datenschutzbestimmungen zu.');
+      errors.datenschutz_akzeptiert = 'Bitte akzeptiere die Datenschutzerklärung.';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       return;
     }
-    setFormSubmitted(true);
+    
+    setFormErrors({});
+    setSubmitStatus('loading');
+    
+    let tracking: any = {};
+    try {
+      const stored = sessionStorage.getItem('lead_tracking');
+      if (stored) {
+        tracking = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error('Fehler beim Lesen des lead_tracking aus sessionStorage:', e);
+    }
+
+    const currentUrl = window.location.href;
+    const referrer = document.referrer || null;
+
+    const payload = {
+      formularname: "Vorgeburtliche Anmeldung - Landingpage",
+      quelle: "Webseite",
+      beratungsart: conType,
+      voraussichtlicher_geburtstermin: dueDateString,
+      anrede: anrede,
+      vorname: vorname,
+      nachname: nachname,
+      telefonnummer: normalizePhone(phone),
+      phone: normalizePhone(phone),
+      mobile: normalizePhone(phone),
+      email: userEmail,
+      wohnort_kanton: conType === 'Persönlich' ? `${strasse}, ${plz} ${ort}` : location,
+      nachricht_bemerkung: message || null,
+      utm_quelle: tracking.utm_quelle || null,
+      utm_medium: tracking.utm_medium || null,
+      utm_kampagne: tracking.utm_kampagne || null,
+      utm_inhalt: tracking.utm_inhalt || null,
+      utm_suchbegriff: tracking.utm_suchbegriff || null,
+      gclid: tracking.gclid || null,
+      fbclid: tracking.fbclid || null,
+      einstiegsseite: tracking.einstiegsseite || currentUrl,
+      aktuelle_seite: currentUrl,
+      verweisende_seite: tracking.verweisende_seite || referrer,
+      datenschutz_akzeptiert: consent,
+      marketing_einwilligung: marketingEinwilligung,
+      uebermittelt_am: new Date().toISOString()
+    };
+    
+    try {
+      const response = await fetch('/api/lead-import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API-Fehler: ${response.status}`);
+      }
+      
+      setSubmitStatus('success');
+      setFormSubmitted(true);
+    } catch (error: any) {
+      console.error('Fehler bei der API-Formularübermittlung:', error.message || error);
+      setSubmitStatus('error');
+    }
   };
 
   // --- Exit Intent Trigger ---
@@ -310,6 +465,386 @@ export default function App() {
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
+
+  const renderForm = (isModal: boolean = false) => {
+    return (
+      <div className="text-teal-deep text-left relative">
+        {/* Check-list special helper badge */}
+        {checklistRequested && (
+          <div className="mb-4 p-3 bg-teal/10 border border-teal/20 text-teal-deep text-xs rounded-xl flex items-center gap-2 font-medium">
+            <span className="w-2 h-2 rounded-full bg-teal animate-ping"></span>
+            <span>Anfrage für die <strong>40-Wochen-Checkliste</strong> per E-Mail ist vorgemerkt!</span>
+          </div>
+        )}
+
+        {!formSubmitted ? (
+          <form onSubmit={formStep === 1 ? handleNextStep : handleFormSubmit} className="space-y-5">
+            
+            {/* Step Indicators */}
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4">
+              <span className="text-xs font-bold text-teal-deep/50 uppercase tracking-widest">
+                Schritt {formStep} von 2
+              </span>
+              <div className="flex gap-1">
+                <span className={`w-6 h-1.5 rounded-full transition-all ${formStep >= 1 ? 'bg-teal' : 'bg-gray-200'}`}></span>
+                <span className={`w-6 h-1.5 rounded-full transition-all ${formStep >= 2 ? 'bg-teal' : 'bg-gray-200'}`}></span>
+              </div>
+            </div>
+
+            {/* STEP 1 FIELDS */}
+            {formStep === 1 && (
+              <div className="space-y-4 animate-fadeIn">
+                
+                <div>
+                  <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-2">
+                    Wie möchtest du beraten werden?
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConType('Telefon')}
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Telefon' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
+                    >
+                      <Phone className="w-4 h-4 text-teal shrink-0" /> <span>Telefon</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConType('Video-Call')}
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Video-Call' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
+                    >
+                      <Video className="w-4 h-4 text-teal shrink-0" /> <span>Video-Call</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConType('Persönlich')}
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Persönlich' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
+                    >
+                      <User className="w-4 h-4 text-teal shrink-0" /> <span>Persönlich</span>
+                    </button>
+                  </div>
+                  {formErrors.beratungsart && <p className="text-coral text-xs font-semibold mt-1">{formErrors.beratungsart}</p>}
+                  <span className="block text-[10px] text-teal-deep/50 mt-1.5">
+                    * Du erhältst die komplette 40-Wochen-Checkliste per E-Mail und das Starter-Set zum Beratungstermin.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                    Voraussichtlicher Geburtstermin:
+                  </label>
+                  <input
+                    type="date"
+                    value={dueDateString}
+                    onChange={(e) => handleDueDateChange(e.target.value)}
+                    className="w-full bg-cream border border-gray-200 rounded-xl py-3 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
+                  />
+                  {formErrors.voraussichtlicher_geburtstermin && <p className="text-coral text-xs font-semibold mt-1">{formErrors.voraussichtlicher_geburtstermin}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                    Deine E-Mail-Adresse: <span className="text-coral">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal/60" />
+                    <input
+                      type="email"
+                      id={`${isModal ? 'modal-' : ''}form-email`}
+                      required
+                      value={userEmail}
+                      onChange={(e) => setUserEmail(e.target.value)}
+                      placeholder="beispiel@domain.ch"
+                      className="w-full bg-cream border border-gray-200 rounded-xl py-3 pl-12 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
+                    />
+                  </div>
+                  {formErrors.email && <p className="text-coral text-xs font-semibold mt-1">{formErrors.email}</p>}
+                </div>
+
+                {/* Button Step 1 */}
+                <button
+                  type="submit"
+                  className="w-full bg-coral hover:bg-coral/95 text-white font-bold py-4 rounded-xl mt-4 shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
+                  id={`${isModal ? 'modal-' : ''}form-next-btn`}
+                >
+                  Weiter <ArrowRight className="w-4 h-4" />
+                </button>
+
+              </div>
+            )}
+
+            {/* STEP 2 FIELDS */}
+            {formStep === 2 && (
+              <div className="space-y-4 animate-fadeIn">
+                
+                <div>
+                  <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1.5">
+                    Anrede: <span className="text-coral">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-3 max-w-xs">
+                    <button
+                      type="button"
+                      onClick={() => setAnrede('Frau')}
+                      className={`py-2 px-4 rounded-xl border text-sm font-bold transition-all cursor-pointer text-center ${anrede === 'Frau' ? 'bg-teal text-white border-teal shadow-sm' : 'border-gray-200 text-teal-deep hover:bg-cream/40'}`}
+                    >
+                      Frau
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnrede('Herr')}
+                      className={`py-2 px-4 rounded-xl border text-sm font-bold transition-all cursor-pointer text-center ${anrede === 'Herr' ? 'bg-teal text-white border-teal shadow-sm' : 'border-gray-200 text-teal-deep hover:bg-cream/40'}`}
+                    >
+                      Herr
+                    </button>
+                  </div>
+                  {formErrors.anrede && <p className="text-coral text-xs font-semibold mt-1">{formErrors.anrede}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                      Vorname: <span className="text-coral">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={vorname}
+                      onChange={(e) => setVorname(e.target.value)}
+                      placeholder="Julia"
+                      className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
+                    />
+                    {formErrors.vorname && <p className="text-coral text-xs font-semibold mt-1">{formErrors.vorname}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                      Nachname: <span className="text-coral">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={nachname}
+                      onChange={(e) => setNachname(e.target.value)}
+                      placeholder="Müller"
+                      className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
+                    />
+                    {formErrors.nachname && <p className="text-coral text-xs font-semibold mt-1">{formErrors.nachname}</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                    Telefonnummer: <span className="text-coral">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+41 79 123 45 67"
+                    className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
+                  />
+                  {formErrors.telefonnummer && <p className="text-coral text-xs font-semibold mt-1">{formErrors.telefonnummer}</p>}
+                </div>
+
+                {conType === 'Persönlich' ? (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                        Strasse & Hausnummer: <span className="text-coral">*</span>
+                      </label>
+                      <div className="relative">
+                        <Home className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-teal/60" />
+                        <input
+                          type="text"
+                          required
+                          value={strasse}
+                          onChange={(e) => setStrasse(e.target.value)}
+                          placeholder="Bahnhofstrasse 12"
+                          className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
+                        />
+                      </div>
+                      {formErrors.strasse && <p className="text-coral text-xs font-semibold mt-1">{formErrors.strasse}</p>}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="col-span-1">
+                        <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1 text-center">
+                          PLZ: <span className="text-coral">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={plz}
+                          onChange={(e) => setPlz(e.target.value)}
+                          placeholder="8000"
+                          className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-3 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold text-center"
+                        />
+                        {formErrors.plz && <p className="text-coral text-xs font-semibold mt-1">{formErrors.plz}</p>}
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                          Ort: <span className="text-coral">*</span>
+                        </label>
+                        <div className="relative">
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-teal/60" />
+                          <input
+                            type="text"
+                            required
+                            value={ort}
+                            onChange={(e) => setOrt(e.target.value)}
+                            placeholder="Zürich"
+                            className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
+                          />
+                        </div>
+                        {formErrors.ort && <p className="text-coral text-xs font-semibold mt-1">{formErrors.ort}</p>}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                      Wohnort / Kanton: <span className="text-coral">*</span>
+                    </label>
+                    <div className="relative">
+                      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-teal/60" />
+                      <input
+                        type="text"
+                        required
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                        placeholder="St. Gallen (SG)"
+                        className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
+                      />
+                    </div>
+                    {formErrors.wohnort_kanton && <p className="text-coral text-xs font-semibold mt-1">{formErrors.wohnort_kanton}</p>}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
+                    Nachricht / Bemerkung (Optional):
+                  </label>
+                  <textarea
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Zusätzliche Fragen oder Wünsche..."
+                    rows={2}
+                    className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal text-sm font-semibold"
+                  />
+                </div>
+
+                {/* Consent Checkboxes */}
+                <div className="flex flex-col gap-3 pt-1">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id={`${isModal ? 'modal-' : ''}form-consent`}
+                      checked={consent}
+                      onChange={(e) => setConsent(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-teal border-gray-300 rounded focus:ring-teal cursor-pointer"
+                    />
+                    <label htmlFor={`${isModal ? 'modal-' : ''}form-consent`} className="text-[11px] text-teal-deep/70 leading-relaxed cursor-pointer select-none">
+                      Ich bin einverstanden, dass FINWIWO mich zum Baby-Vorsorge-Check kontaktiert und meine Angaben gemäss der <span className="underline hover:text-teal font-semibold cursor-pointer" onClick={() => openLegal('datenschutz')}>Datenschutzerklärung</span> verarbeitet. <span className="text-coral">*</span>
+                    </label>
+                  </div>
+                  {formErrors.datenschutz_akzeptiert && <p className="text-coral text-xs font-semibold">{formErrors.datenschutz_akzeptiert}</p>}
+
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id={`${isModal ? 'modal-' : ''}form-marketing`}
+                      checked={marketingEinwilligung}
+                      onChange={(e) => setMarketingEinwilligung(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-teal border-gray-300 rounded focus:ring-teal cursor-pointer"
+                    />
+                    <label htmlFor={`${isModal ? 'modal-' : ''}form-marketing`} className="text-[11px] text-teal-deep/70 leading-relaxed cursor-pointer select-none">
+                      Ich möchte zukünftig per E-Mail oder Telefon über Angebote, News und nützliche Tipps rund um die Familienvorsorge informiert werden (optional).
+                    </label>
+                  </div>
+                </div>
+
+                {/* Actions & Errors */}
+                {submitStatus === 'error' && (
+                  <div className="p-3 bg-red-50 border border-red-200 text-coral text-xs font-semibold rounded-xl leading-relaxed">
+                    Die Anmeldung konnte leider nicht übermittelt werden. Bitte versuche es erneut oder kontaktiere uns direkt.
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={submitStatus === 'loading'}
+                    onClick={() => setFormStep(1)}
+                    className="flex-1 bg-cream hover:bg-gray-100 text-teal-deep border border-gray-200 font-bold py-3.5 rounded-xl transition-all cursor-pointer text-xs disabled:opacity-50"
+                  >
+                    Zurück
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitStatus === 'loading'}
+                    className="flex-[2] bg-coral hover:bg-coral/95 text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+                    id={`${isModal ? 'modal-' : ''}form-submit-btn`}
+                  >
+                    {submitStatus === 'loading' ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span>Übermittelt...</span>
+                      </>
+                    ) : (
+                      'Baby-Check sichern'
+                    )}
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+          </form>
+        ) : (
+          // SUCCESS SCREEN
+          <div className="text-center py-8 space-y-6 animate-fadeIn">
+            <div className="w-16 h-16 bg-teal/15 text-teal rounded-full flex items-center justify-center mx-auto shadow-sm animate-bounce">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black font-display text-teal-deep">
+                Anfrage übermittelt!
+              </h3>
+              <p className="text-sm text-teal-deep/80 leading-relaxed max-w-sm mx-auto">
+                Herzlichen Dank, <strong>{vorname}</strong>! Deine Anfrage für den kostenlosen Baby-Vorsorge-Check ist erfolgreich eingegangen.
+              </p>
+            </div>
+
+            <div className="bg-cream/50 rounded-2xl p-5 border border-teal/5 text-xs text-teal-deep/80 text-left space-y-2.5 max-w-sm mx-auto">
+              <div className="font-bold text-teal uppercase tracking-wider text-center border-b border-gray-100 pb-1.5 mb-1.5">
+                Nächste Schritte:
+              </div>
+              <p className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-teal shrink-0 mt-0.5" />
+                Wir prüfen deine Angaben bezüglich des errechneten Termins ({new Date(dueDateString).toLocaleDateString('de-CH')}).
+              </p>
+              <p className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-teal shrink-0 mt-0.5" />
+                Wir melden uns innert 24 Stunden per Telefon oder E-Mail für die Terminabstimmung.
+              </p>
+              <p className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-teal shrink-0 mt-0.5" />
+                {checklistRequested || userEmail ? (
+                  <span>Deine persönliche <strong>40-Wochen-Schwangerschaftscheckliste</strong> wird an <strong>{userEmail}</strong> gesendet.</span>
+                ) : (
+                  <span>Die Checkliste senden wir direkt an deine hinterlegte E-Mail-Adresse.</span>
+                )}
+              </p>
+            </div>
+
+            <p className="text-[11px] text-teal-deep/50 italic max-w-xs mx-auto leading-normal">
+              * Deine Anfrage wurde verschlüsselt und sicher übermittelt.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-cream font-sans selection:bg-coral selection:text-white relative pb-16 md:pb-0">
@@ -377,19 +912,11 @@ export default function App() {
             
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
               <button
-                onClick={() => scrollToSection('schwangerschafts-rechner')}
-                className="bg-coral hover:bg-coral/90 text-white font-bold text-base py-4 px-8 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5"
-                id="hero-primary-cta"
-              >
-                Geburtstermin eingeben <ArrowRight className="w-5 h-5" />
-              </button>
-              
-              <button
                 onClick={() => scrollToSection('vorteile')}
-                className="bg-white hover:bg-gray-50 text-teal-deep border-2 border-teal-deep/10 font-bold text-base py-4 px-8 rounded-full transition-all flex items-center justify-center gap-2"
+                className="bg-coral hover:bg-coral/90 text-white font-bold text-base py-4 px-8 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5 cursor-pointer"
                 id="hero-secondary-cta"
               >
-                Was dein Baby bekommt
+                Was dein Baby bekommt <ArrowRight className="w-5 h-5" />
               </button>
             </div>
 
@@ -521,7 +1048,7 @@ export default function App() {
 
               {/* Action Button */}
               <button
-                onClick={() => scrollToSection('vorsorge-form')}
+                onClick={() => setFormModalOpen(true)}
                 className="w-full bg-coral hover:bg-coral/95 text-white font-bold py-4 rounded-xl mt-6 shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
                 id="rechner-cta"
               >
@@ -1233,338 +1760,7 @@ export default function App() {
             <div className="lg:col-span-6">
               <div className="bg-white text-teal-deep rounded-3xl p-6 sm:p-8 shadow-2xl border border-teal/10 relative">
                 
-                {/* Check-list special helper badge */}
-                {checklistRequested && (
-                  <div className="mb-4 p-3 bg-teal/10 border border-teal/20 text-teal-deep text-xs rounded-xl flex items-center gap-2 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-teal animate-ping"></span>
-                    <span>Anfrage für die <strong>40-Wochen-Checkliste</strong> per E-Mail ist vorgemerkt!</span>
-                  </div>
-                )}
-
-                {!formSubmitted ? (
-                  <form onSubmit={formStep === 1 ? handleNextStep : handleFormSubmit} className="space-y-5">
-                    
-                    {/* Step Indicators */}
-                    <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4">
-                      <span className="text-xs font-bold text-teal-deep/50 uppercase tracking-widest">
-                        Schritt {formStep} von 2
-                      </span>
-                      <div className="flex gap-1">
-                        <span className={`w-6 h-1.5 rounded-full transition-all ${formStep >= 1 ? 'bg-teal' : 'bg-gray-200'}`}></span>
-                        <span className={`w-6 h-1.5 rounded-full transition-all ${formStep >= 2 ? 'bg-teal' : 'bg-gray-200'}`}></span>
-                      </div>
-                    </div>
-
-                    {/* STEP 1 FIELDS */}
-                    {formStep === 1 && (
-                      <div className="space-y-4 animate-fadeIn">
-                        
-                        <div>
-                          <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-2">
-                            Wie möchtest du beraten werden?
-                          </label>
-                          <div className="grid grid-cols-3 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setConType('Telefon')}
-                              className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Telefon' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
-                            >
-                              <Phone className="w-4 h-4 text-teal shrink-0" /> <span>Telefon</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConType('Video-Call')}
-                              className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Video-Call' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
-                            >
-                              <Video className="w-4 h-4 text-teal shrink-0" /> <span>Video-Call</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConType('Persönlich')}
-                              className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Persönlich' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
-                            >
-                              <User className="w-4 h-4 text-teal shrink-0" /> <span>Persönlich</span>
-                            </button>
-                          </div>
-                          <span className="block text-[10px] text-teal-deep/50 mt-1.5">
-                            * Du erhältst die komplette 40-Wochen-Checkliste per E-Mail und das Starter-Set zum Beratungstermin.
-                          </span>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                            Voraussichtlicher Geburtstermin:
-                          </label>
-                          <input
-                            type="date"
-                            value={dueDateString}
-                            onChange={(e) => handleDueDateChange(e.target.value)}
-                            className="w-full bg-cream border border-gray-200 rounded-xl py-3 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                            Deine E-Mail-Adresse: <span className="text-coral">*</span>
-                          </label>
-                          <div className="relative">
-                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-teal/60" />
-                            <input
-                              type="email"
-                              id="form-email"
-                              required
-                              value={userEmail}
-                              onChange={(e) => setUserEmail(e.target.value)}
-                              placeholder="beispiel@domain.ch"
-                              className="w-full bg-cream border border-gray-200 rounded-xl py-3 pl-12 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Button Step 1 */}
-                        <button
-                          type="submit"
-                          className="w-full bg-coral hover:bg-coral/95 text-white font-bold py-4 rounded-xl mt-4 shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
-                          id="form-next-btn"
-                        >
-                          Weiter <ArrowRight className="w-4 h-4" />
-                        </button>
-
-                      </div>
-                    )}
-
-                    {/* STEP 2 FIELDS */}
-                    {formStep === 2 && (
-                      <div className="space-y-4 animate-fadeIn">
-                        
-                        <div>
-                          <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1.5">
-                            Anrede: <span className="text-coral">*</span>
-                          </label>
-                          <div className="grid grid-cols-2 gap-3 max-w-xs">
-                            <button
-                              type="button"
-                              onClick={() => setAnrede('Frau')}
-                              className={`py-2 px-4 rounded-xl border text-sm font-bold transition-all cursor-pointer text-center ${anrede === 'Frau' ? 'bg-teal text-white border-teal shadow-sm' : 'border-gray-200 text-teal-deep hover:bg-cream/40'}`}
-                            >
-                              Frau
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setAnrede('Herr')}
-                              className={`py-2 px-4 rounded-xl border text-sm font-bold transition-all cursor-pointer text-center ${anrede === 'Herr' ? 'bg-teal text-white border-teal shadow-sm' : 'border-gray-200 text-teal-deep hover:bg-cream/40'}`}
-                            >
-                              Herr
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                              Vorname: <span className="text-coral">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={vorname}
-                              onChange={(e) => setVorname(e.target.value)}
-                              placeholder="Julia"
-                              className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                              Nachname: <span className="text-coral">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={nachname}
-                              onChange={(e) => setNachname(e.target.value)}
-                              placeholder="Müller"
-                              className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                            Telefonnummer: <span className="text-coral">*</span>
-                          </label>
-                          <input
-                            type="tel"
-                            required
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            placeholder="+41 79 123 45 67"
-                            className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
-                          />
-                        </div>
-
-                        {conType === 'Persönlich' ? (
-                          <>
-                            <div>
-                              <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                                Strasse & Hausnummer: <span className="text-coral">*</span>
-                              </label>
-                              <div className="relative">
-                                <Home className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-teal/60" />
-                                <input
-                                  type="text"
-                                  required
-                                  value={strasse}
-                                  onChange={(e) => setStrasse(e.target.value)}
-                                  placeholder="Bahnhofstrasse 12"
-                                  className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-3">
-                              <div className="col-span-1">
-                                <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1 text-center">
-                                  PLZ: <span className="text-coral">*</span>
-                                </label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={plz}
-                                  onChange={(e) => setPlz(e.target.value)}
-                                  placeholder="8000"
-                                  className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-3 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold text-center"
-                                />
-                              </div>
-                              <div className="col-span-2">
-                                <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                                  Ort: <span className="text-coral">*</span>
-                                </label>
-                                <div className="relative">
-                                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-teal/60" />
-                                  <input
-                                    type="text"
-                                    required
-                                    value={ort}
-                                    onChange={(e) => setOrt(e.target.value)}
-                                    placeholder="Zürich"
-                                    className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div>
-                            <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                              Wohnort / Kanton: <span className="text-coral">*</span>
-                            </label>
-                            <div className="relative">
-                              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-teal/60" />
-                              <input
-                                type="text"
-                                required
-                                value={location}
-                                onChange={(e) => setLocation(e.target.value)}
-                                placeholder="St. Gallen (SG)"
-                                className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        <div>
-                          <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
-                            Nachricht / Bemerkung (Optional):
-                          </label>
-                          <textarea
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            placeholder="Zusätzliche Fragen oder Wünsche..."
-                            rows={2}
-                            className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal text-sm font-semibold"
-                          />
-                        </div>
-
-                        {/* Consent Checkbox */}
-                        <div className="flex items-start gap-3 pt-1">
-                          <input
-                            type="checkbox"
-                            required
-                            id="form-consent"
-                            checked={consent}
-                            onChange={(e) => setConsent(e.target.checked)}
-                            className="mt-1 w-4 h-4 text-teal border-gray-300 rounded focus:ring-teal"
-                          />
-                          <label htmlFor="form-consent" className="text-[11px] text-teal-deep/70 leading-relaxed cursor-pointer select-none">
-                            Ich bin einverstanden, dass FINWIWO mich zum Baby-Vorsorge-Check kontaktiert und meine Angaben gemäss der <span className="underline hover:text-teal font-semibold cursor-pointer" onClick={() => openLegal('datenschutz')}>Datenschutzerklärung</span> verarbeitet.
-                          </label>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-3 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => setFormStep(1)}
-                            className="flex-1 bg-cream hover:bg-gray-100 text-teal-deep border border-gray-200 font-bold py-3.5 rounded-xl transition-all cursor-pointer text-xs"
-                          >
-                            Zurück
-                          </button>
-                          <button
-                            type="submit"
-                            className="flex-[2] bg-coral hover:bg-coral/95 text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs uppercase tracking-wider"
-                            id="form-submit-btn"
-                          >
-                            Baby-Check sichern
-                          </button>
-                        </div>
-
-                      </div>
-                    )}
-
-                  </form>
-                ) : (
-                  // SUCCESS SCREEN
-                  <div className="text-center py-8 space-y-6 animate-fadeIn">
-                    <div className="w-16 h-16 bg-teal/15 text-teal rounded-full flex items-center justify-center mx-auto shadow-sm animate-bounce">
-                      <CheckCircle2 className="w-10 h-10" />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <h3 className="text-2xl font-black font-display text-teal-deep">
-                        Anfrage vorbereitet!
-                      </h3>
-                      <p className="text-sm text-teal-deep/80 leading-relaxed max-w-sm mx-auto">
-                        Herzlichen Dank, <strong>{vorname}</strong>! Deine Anfrage für den kostenlosen Baby-Vorsorge-Check ist erfolgreich eingegangen.
-                      </p>
-                    </div>
-
-                    <div className="bg-cream/50 rounded-2xl p-5 border border-teal/5 text-xs text-teal-deep/80 text-left space-y-2.5 max-w-sm mx-auto">
-                      <div className="font-bold text-teal uppercase tracking-wider text-center border-b border-gray-100 pb-1.5 mb-1.5">
-                        Nächste Schritte:
-                      </div>
-                      <p className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-teal shrink-0 mt-0.5" />
-                        Wir prüfen deine Angaben bezüglich des errechneten Termins ({new Date(dueDateString).toLocaleDateString('de-CH')}).
-                      </p>
-                      <p className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-teal shrink-0 mt-0.5" />
-                        Wir melden uns innert 24 Stunden per Telefon oder E-Mail für die Terminabstimmung.
-                      </p>
-                      <p className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-teal shrink-0 mt-0.5" />
-                        {checklistRequested || userEmail ? (
-                          <span>Deine persönliche <strong>40-Wochen-Schwangerschaftscheckliste</strong> wird an <strong>{userEmail}</strong> gesendet.</span>
-                        ) : (
-                          <span>Die Checkliste senden wir direkt an deine hinterlegte E-Mail-Adresse.</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <p className="text-[11px] text-teal-deep/50 italic max-w-xs mx-auto leading-normal">
-                      * Keine echten Daten wurden übermittelt. Dies ist eine voll funktionsfähige interaktive Vorschau-Simulation.
-                    </p>
-                  </div>
-                )}
+                {renderForm(false)}
 
                 {/* Privacy and lock icon */}
                 <div className="absolute -bottom-10 left-0 right-0 text-center flex items-center justify-center gap-1.5 text-xs text-white/70">
@@ -1732,7 +1928,7 @@ export default function App() {
               <button
                 onClick={() => {
                   setShowExitIntent(false);
-                  scrollToSection('vorsorge-form');
+                  setFormModalOpen(true);
                 }}
                 className="w-full bg-coral hover:bg-coral/95 text-white font-bold py-3.5 rounded-full shadow-lg hover:shadow-xl transition-all cursor-pointer text-sm uppercase tracking-wider"
                 id="exit-modal-primary"
@@ -1764,6 +1960,37 @@ export default function App() {
         initialTab={legalModalTab} 
         onClose={() => setLegalModalOpen(false)} 
       />
+
+      {/* 17. Formular Overlay Modal */}
+      {formModalOpen && (
+        <div className="fixed inset-0 bg-teal-deep/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative border border-teal/10 my-8">
+            
+            {/* Close Button */}
+            <button 
+              onClick={() => setFormModalOpen(false)}
+              className="absolute top-4 right-4 text-teal-deep/50 hover:text-teal-deep transition-colors p-1.5 rounded-full hover:bg-cream z-10 cursor-pointer"
+              id="form-modal-close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="space-y-4">
+              <div className="text-center pb-2">
+                <span className="text-teal text-xs font-bold tracking-widest uppercase block mb-1">
+                  Kostenloser Baby-Vorsorge-Check
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black font-display text-teal-deep">
+                  Vorgeburtliche Anmeldung sichern
+                </h3>
+              </div>
+
+              {renderForm(true)}
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
