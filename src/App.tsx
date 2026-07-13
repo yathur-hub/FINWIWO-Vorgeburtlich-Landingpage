@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 import { 
   Check, 
   Calendar, 
@@ -915,11 +916,21 @@ export default function App() {
       </header>
 
       {/* 3. Hero-Sektion */}
-      <section className="py-12 md:py-20 px-4 sm:px-6 max-w-7xl mx-auto">
+      <motion.section 
+        className="py-12 md:py-20 px-4 sm:px-6 max-w-7xl mx-auto"
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           
           {/* Left Column: Copywriting */}
-          <div className="lg:col-span-7 space-y-6">
+          <motion.div 
+            className="lg:col-span-7 space-y-6"
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+          >
             <div className="inline-block py-1 px-3 bg-teal/10 rounded-full text-teal text-xs font-bold tracking-wider uppercase">
               Für werdende Eltern
             </div>
@@ -947,10 +958,16 @@ export default function App() {
               <Shield className="w-5 h-5 text-teal shrink-0" />
               <span><strong>Unabhängig.</strong> Wir vergleichen alle Kassen der Schweiz und übernehmen die gesamte Anmeldung kostenlos für dich.</span>
             </div>
-          </div>
+          </motion.div>
 
           {/* Right Column: Calculator Widget */}
-          <div className="lg:col-span-5" id="schwangerschafts-rechner">
+          <motion.div 
+            className="lg:col-span-5" 
+            id="schwangerschafts-rechner"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
             <div className="bg-teal-deep text-white rounded-3xl p-6 sm:p-8 shadow-2xl relative border border-white/5 overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 bg-teal/10 rounded-full blur-2xl pointer-events-none"></div>
               
@@ -1077,13 +1094,20 @@ export default function App() {
                 Vorgeburtliche Anmeldung sichern <ArrowRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
+          </motion.div>
 
         </div>
-      </section>
+      </motion.section>
 
       {/* 4. Sektion „Darum vor der Geburt“ */}
-      <section className="bg-teal-deep text-white py-16 md:py-24 px-4 sm:px-6" id="warum-vorab">
+      <motion.section 
+        className="bg-teal-deep text-white py-16 md:py-24 px-4 sm:px-6" 
+        id="warum-vorab"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
@@ -1154,10 +1178,17 @@ export default function App() {
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* 5. Sektion „Was dein Baby bekommt“ (6 Vorteilskarten) */}
-      <section className="py-20 px-4 sm:px-6 max-w-7xl mx-auto" id="vorteile">
+      <motion.section 
+        className="py-20 px-4 sm:px-6 max-w-7xl mx-auto" 
+        id="vorteile"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
           <span className="text-teal text-xs font-bold tracking-widest uppercase block">
             Was dein Baby bekommt
@@ -1257,10 +1288,16 @@ export default function App() {
         <div className="mt-8 text-center text-xs text-teal-deep/60 max-w-xl mx-auto italic">
           * Wichtiger Hinweis: Es gelten stets die jeweiligen Allgemeinen Versicherungsbedingungen (AVB) der Kassen. Ein Anspruch auf Leistungen besteht nur bei erfolgreicher, fristgerechter Aufnahme und Abschluss der entsprechenden Produkte.
         </div>
-      </section>
+      </motion.section>
 
       {/* 6. SSW-Checkliste / Wochenmodul */}
-      <section className="bg-teal/5 py-16 px-4 sm:px-6">
+      <motion.section 
+        className="bg-teal/5 py-16 px-4 sm:px-6"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="max-w-4xl mx-auto">
           <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-xl border border-teal/10 text-teal-deep space-y-6">
             
@@ -1307,10 +1344,17 @@ export default function App() {
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* 7. Baby-Namen-Finder */}
-      <section className="bg-blush py-20 px-4 sm:px-6" id="namen-finder">
+      <motion.section 
+        className="bg-blush py-20 px-4 sm:px-6" 
+        id="namen-finder"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="max-w-5xl mx-auto text-teal-deep">
           
           <div className="text-center max-w-2xl mx-auto space-y-4 mb-12">
@@ -1399,10 +1443,17 @@ export default function App() {
           </div>
 
         </div>
-      </section>
+      </motion.section>
 
       {/* 8. Sternzeichen-Widget */}
-      <section className="py-16 px-4 sm:px-6 max-w-5xl mx-auto" id="sternzeichen-sektion">
+      <motion.section 
+        className="py-16 px-4 sm:px-6 max-w-5xl mx-auto" 
+        id="sternzeichen-sektion"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-xl border border-teal/10 text-teal-deep">
           
           <div className="text-center max-w-2xl mx-auto space-y-3 mb-8">
@@ -1465,10 +1516,17 @@ export default function App() {
           </p>
 
         </div>
-      </section>
+      </motion.section>
 
       {/* 9. Stimmen / Social Proof */}
-      <section className="bg-cream py-16 px-4 sm:px-6" id="stimmen-proof">
+      <motion.section 
+        className="bg-cream py-16 px-4 sm:px-6" 
+        id="stimmen-proof"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="max-w-7xl mx-auto space-y-12">
           
           <div className="text-center space-y-3">
@@ -1514,10 +1572,17 @@ export default function App() {
           </div>
 
         </div>
-      </section>
+      </motion.section>
 
       {/* 9.5 Vertrauensteil / Über uns */}
-      <section className="bg-white border-y border-teal-deep/5 py-16 md:py-24 px-4 sm:px-6" id="co-pilot-team">
+      <motion.section 
+        className="bg-white border-y border-teal-deep/5 py-16 md:py-24 px-4 sm:px-6" 
+        id="co-pilot-team"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
@@ -1620,10 +1685,17 @@ export default function App() {
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* 10. Werte-Sektion */}
-      <section className="py-12 px-4 sm:px-6 max-w-7xl mx-auto" id="werte">
+      <motion.section 
+        className="py-12 px-4 sm:px-6 max-w-7xl mx-auto" 
+        id="werte"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-teal-deep">
           
           {/* Wert 1: Unabhängig */}
@@ -1666,10 +1738,17 @@ export default function App() {
           </div>
 
         </div>
-      </section>
+      </motion.section>
 
       {/* 11. Baby-Starter-Set Geschenk */}
-      <section className="py-12 px-4 sm:px-6 max-w-4xl mx-auto" id="starter-set">
+      <motion.section 
+        className="py-12 px-4 sm:px-6 max-w-4xl mx-auto" 
+        id="starter-set"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="bg-blush rounded-3xl p-6 sm:p-10 shadow-lg border border-coral/10 text-teal-deep relative overflow-hidden">
           
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
@@ -1721,10 +1800,17 @@ export default function App() {
           </div>
 
         </div>
-      </section>
+      </motion.section>
 
       {/* 12. Abschlussformular für Baby-Vorsorge-Check */}
-      <section className="bg-teal-deep text-white py-16 md:py-24 px-4 sm:px-6" id="vorsorge-form">
+      <motion.section 
+        className="bg-teal-deep text-white py-16 md:py-24 px-4 sm:px-6" 
+        id="vorsorge-form"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
@@ -1795,10 +1881,17 @@ export default function App() {
 
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* 13. XL-FAQ */}
-      <section className="py-20 px-4 sm:px-6 max-w-4xl mx-auto" id="faq">
+      <motion.section 
+        className="py-20 px-4 sm:px-6 max-w-4xl mx-auto" 
+        id="faq"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      >
         
         <div className="text-center space-y-3 mb-12">
           <span className="text-teal text-xs font-bold tracking-widest uppercase block">
@@ -1843,7 +1936,7 @@ export default function App() {
           })}
         </div>
 
-      </section>
+      </motion.section>
 
       {/* 14. Footer */}
       <footer className="bg-teal-deep text-white/80 py-16 px-4 sm:px-6 border-t border-white/5" id="impressum-footer">
