@@ -16,6 +16,14 @@ export interface Testimonial {
   isHebamme?: boolean;
 }
 
+export interface GoogleReview {
+  author: string;
+  rating: number;
+  date: string;
+  text: string;
+  avatarBg?: string;
+}
+
 export interface FAQItem {
   id: number;
   question: string;

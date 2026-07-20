@@ -1,4 +1,4 @@
-import { BabyName, ZodiacInfo, FruitSize, Testimonial, FAQItem } from './types';
+import { BabyName, ZodiacInfo, FruitSize, Testimonial, FAQItem, GoogleReview } from './types';
 
 export const BABY_NAMES: BabyName[] = [
   // Mädchen - Klassisch
@@ -545,5 +545,29 @@ export const FAQ_ITEMS: FAQItem[] = [
     id: 7,
     question: 'Kann ich mein Baby nach der Geburt noch in eine bessere Lösung wechseln?',
     answer: 'Ein Wechsel nach der Geburt ist grundsätzlich möglich, unterliegt dann aber der vollen Gesundheitsprüfung. Hat das Baby bis dahin Allergien, Atemwegserkrankungen oder andere Befunde entwickelt, wird die Aufnahme oft abgelehnt. Deshalb ist die vorgeburtliche Anmeldung der sicherste, einfachste und stressfreiste Weg.'
+  }
+];
+
+export const FINWIWO_GOOGLE_REVIEWS: GoogleReview[] = [
+  {
+    author: "Nicoletta M.",
+    rating: 5,
+    date: "Vor 3 Monaten",
+    text: "Alessandro Palermo hat mich äusserst kompetent und freundlich beraten. Er nimmt sich extrem viel Zeit, geht auf alle individuellen Wünsche ein und erklärt komplexe Finanz- und Versicherungsthemen verständlich und transparent. Man fühlt sich zu jeder Zeit bestens aufgehoben und absolut ehrlich beraten. Wärmstens zu empfehlen!",
+    avatarBg: "bg-teal text-white"
+  },
+  {
+    author: "Marc B.",
+    rating: 5,
+    date: "Vor 2 Monaten",
+    text: "Top Beratung für die vorgeburtliche Krankenkassenanmeldung unseres Babys! Herr Palermo hat uns die Unterschiede sachlich aufgezeigt und die perfekte Lösung gefunden. Alles unkompliziert, unabhängig und super freundlich.",
+    avatarBg: "bg-coral text-white"
+  },
+  {
+    author: "Sabrina K.",
+    rating: 5,
+    date: "Vor 1 Monat",
+    text: "Sehr professioneller Service. Ich habe schnell Antworten erhalten und fühlte mich zu keinem Zeitpunkt gedrängt. FINWIWO hat die gesamte Abwicklung übernommen. Wirklich ein toller Co-Pilot für Finanz- und Vorsorgefragen!",
+    avatarBg: "bg-teal-deep text-white"
   }
 ];

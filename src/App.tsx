@@ -28,9 +28,10 @@ import {
   X,
   Home
 } from 'lucide-react';
-import { BABY_NAMES, ZODIACS, FRUIT_SIZES, TESTIMONIALS, FAQ_ITEMS } from './data';
+import { BABY_NAMES, ZODIACS, FRUIT_SIZES, TESTIMONIALS, FAQ_ITEMS, FINWIWO_GOOGLE_REVIEWS } from './data';
 import { GenderType, StyleType, BabyName, ZodiacInfo } from './types';
 import LegalModal from './components/LegalModal';
+import { pushToDataLayer, TRACKING_FORM_NAME, normalizeConsultationType } from './utils/tracking';
 
 // Anchor helper function
 const scrollToSection = (id: string) => {
@@ -226,9 +227,229 @@ export default function App() {
   const [formSubmitted, setFormSubmitted] = useState<boolean>(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // --- GTM Tracking Refs and Handlers ---
+  const formViewTriggeredRef = useRef<boolean>(false);
+  const formStartTriggeredRef = useRef<boolean>(false);
+  const lastStepViewedRef = useRef<number | null>(null);
+  const stepStartTriggeredRef = useRef<{ 1: boolean; 2: boolean }>({ 1: false, 2: false });
+
+  const triggerFormStepView = (step: 1 | 2) => {
+    if (!formViewTriggeredRef.current) return;
+    if (lastStepViewedRef.current === step) return;
+    lastStepViewedRef.current = step;
+
+    const normalizedConType = normalizeConsultationType(conType) || 'phone';
+    
+    if (step === 1) {
+      pushToDataLayer({
+        event: "form_step_view",
+        form_name: TRACKING_FORM_NAME,
+        form_step: 1,
+        form_step_name: "consultation_details",
+        form_step_variant: "default",
+        consultation_type: normalizedConType,
+        previous_step: null
+      });
+    } else {
+      pushToDataLayer({
+        event: "form_step_view",
+        form_name: TRACKING_FORM_NAME,
+        form_step: 2,
+        form_step_name: "contact_details",
+        form_step_variant: conType === 'Persönlich' ? "in_person" : "default",
+        consultation_type: normalizedConType,
+        previous_step: 1
+      });
+    }
+  };
+
+  const triggerFormView = () => {
+    if (formViewTriggeredRef.current) return;
+    formViewTriggeredRef.current = true;
+
+    pushToDataLayer({
+      event: "form_view",
+      form_name: TRACKING_FORM_NAME,
+      form_location: window.location.pathname
+    });
+
+    triggerFormStepView(1);
+  };
+
+  const triggerFormStart = () => {
+    if (formStartTriggeredRef.current) return;
+    formStartTriggeredRef.current = true;
+
+    pushToDataLayer({
+      event: "form_start",
+      form_name: TRACKING_FORM_NAME,
+      form_location: window.location.pathname
+    });
+  };
+
+  const triggerFormStepStart = (step: 1 | 2) => {
+    if (stepStartTriggeredRef.current[step]) return;
+    stepStartTriggeredRef.current[step] = true;
+
+    const normalizedConType = normalizeConsultationType(conType) || 'phone';
+
+    pushToDataLayer({
+      event: "form_step_start",
+      form_name: TRACKING_FORM_NAME,
+      form_step: step,
+      form_step_name: step === 1 ? "consultation_details" : "contact_details",
+      form_step_variant: step === 2 && conType === 'Persönlich' ? "in_person" : "default",
+      consultation_type: normalizedConType
+    });
+  };
+
+  const triggerFormStepComplete = (step: 1 | 2) => {
+    const normalizedConType = normalizeConsultationType(conType) || 'phone';
+    if (step === 1) {
+      pushToDataLayer({
+        event: "form_step_complete",
+        form_name: TRACKING_FORM_NAME,
+        form_step: 1,
+        form_step_name: "consultation_details",
+        form_step_variant: "default",
+        consultation_type: normalizedConType,
+        next_step: 2
+      });
+    } else {
+      pushToDataLayer({
+        event: "form_step_complete",
+        form_name: TRACKING_FORM_NAME,
+        form_step: 2,
+        form_step_name: "contact_details",
+        form_step_variant: conType === 'Persönlich' ? "in_person" : "default",
+        consultation_type: normalizedConType,
+        next_step: null
+      });
+    }
+  };
+
+  const triggerFormStepErrors = (step: 1 | 2, errors: Record<string, string>) => {
+    Object.entries(errors).forEach(([fieldKey, errorMsg]) => {
+      let field_name = "";
+      let error_type = "required";
+
+      if (step === 1) {
+        if (fieldKey === 'beratungsart') {
+          field_name = "consultation_type";
+        } else if (fieldKey === 'voraussichtlicher_geburtstermin') {
+          field_name = "birth_date";
+        } else if (fieldKey === 'email') {
+          field_name = "email";
+        }
+      } else {
+        if (fieldKey === 'anrede') {
+          field_name = "salutation";
+        } else if (fieldKey === 'vorname') {
+          field_name = "first_name";
+        } else if (fieldKey === 'nachname') {
+          field_name = "last_name";
+        } else if (fieldKey === 'telefonnummer') {
+          field_name = "phone";
+          if (phone.trim() && normalizePhone(phone).length < 9) {
+            error_type = "invalid_format";
+          }
+        } else if (fieldKey === 'strasse') {
+          field_name = "street";
+        } else if (fieldKey === 'plz') {
+          field_name = "postal_code";
+        } else if (fieldKey === 'ort') {
+          field_name = "city";
+        } else if (fieldKey === 'wohnort_kanton') {
+          field_name = "location";
+        } else if (fieldKey === 'datenschutz_akzeptiert') {
+          field_name = "privacy_consent";
+        }
+      }
+
+      if (field_name) {
+        pushToDataLayer({
+          event: "form_step_error",
+          form_name: TRACKING_FORM_NAME,
+          form_step: step,
+          form_step_name: step === 1 ? "consultation_details" : "contact_details",
+          error_type,
+          field_name,
+          error_count: 1
+        });
+      }
+    });
+  };
+
+  useEffect(() => {
+    const formEl = document.getElementById('vorsorge-form');
+    let observer: IntersectionObserver | null = null;
+    
+    if (formEl) {
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            triggerFormView();
+            if (observer) {
+              observer.disconnect();
+            }
+          }
+        });
+      }, { threshold: 0.1 });
+      
+      observer.observe(formEl);
+    }
+
+    return () => {
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (formModalOpen) {
+      triggerFormView();
+    }
+  }, [formModalOpen]);
+
+  useEffect(() => {
+    if (formViewTriggeredRef.current) {
+      triggerFormStepView(formStep);
+    }
+  }, [formStep]);
   
   // Form fields
   const [conType, setConType] = useState<'Telefon' | 'Video-Call' | 'Persönlich'>('Telefon');
+
+  const handleConTypeSelect = (type: 'Telefon' | 'Video-Call' | 'Persönlich') => {
+    triggerFormStart();
+    triggerFormStepStart(1);
+    
+    const normalized = normalizeConsultationType(type);
+    if (normalized) {
+      pushToDataLayer({
+        event: "consultation_type_select",
+        form_name: TRACKING_FORM_NAME,
+        consultation_type: normalized
+      });
+    }
+    setConType(type);
+  };
+
+  const handleBackStep = () => {
+    const normalizedConType = normalizeConsultationType(conType) || 'phone';
+    pushToDataLayer({
+      event: "form_step_back",
+      form_name: TRACKING_FORM_NAME,
+      form_step: 2,
+      form_step_name: "contact_details",
+      previous_step: 2,
+      target_step: 1,
+      consultation_type: normalizedConType
+    });
+    setFormStep(1);
+  };
   const [anrede, setAnrede] = useState<'Frau' | 'Herr'>('Frau');
   const [userEmail, setUserEmail] = useState<string>('');
   const [vorname, setVorname] = useState<string>('');
@@ -319,10 +540,12 @@ export default function App() {
     
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
+      triggerFormStepErrors(1, errors);
       return;
     }
     
     setFormErrors({});
+    triggerFormStepComplete(1);
     setFormStep(2);
   };
 
@@ -367,10 +590,20 @@ export default function App() {
     
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
+      triggerFormStepErrors(2, errors);
       return;
     }
     
     setFormErrors({});
+    triggerFormStepComplete(2);
+
+    const normalizedConType = normalizeConsultationType(conType) || 'phone';
+    pushToDataLayer({
+      event: "form_submit_attempt",
+      form_name: TRACKING_FORM_NAME,
+      consultation_type: normalizedConType
+    });
+
     setSubmitStatus('loading');
     
     let tracking: any = {};
@@ -444,6 +677,13 @@ export default function App() {
           response: responseData,
         });
 
+        pushToDataLayer({
+          event: "form_submit_error",
+          form_name: TRACKING_FORM_NAME,
+          consultation_type: normalizedConType,
+          error_type: "server_error"
+        });
+
         const serverMessage =
           typeof responseData.error === 'string'
             ? responseData.error
@@ -482,10 +722,26 @@ export default function App() {
 
       setSubmitStatus('success');
       setFormSubmitted(true);
+
+      pushToDataLayer({
+        event: "form_submit_success",
+        form_name: TRACKING_FORM_NAME,
+        lead_source: "website",
+        consultation_type: normalizedConType,
+        marketing_consent: !!marketingEinwilligung,
+        form_steps_completed: 2
+      });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Fehler bei der API-Formularübermittlung:', errorMessage);
       setSubmitStatus('error');
+
+      pushToDataLayer({
+        event: "form_submit_error",
+        form_name: TRACKING_FORM_NAME,
+        consultation_type: normalizedConType,
+        error_type: "network_error"
+      });
     }
   };
 
@@ -522,27 +778,27 @@ export default function App() {
                   <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-2">
                     Wie möchtest du beraten werden?
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setConType('Telefon')}
-                      className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Telefon' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
+                      onClick={() => handleConTypeSelect('Telefon')}
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 p-1.5 sm:p-3.5 rounded-xl border text-[11px] sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Telefon' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
                     >
-                      <Phone className="w-4 h-4 text-teal shrink-0" /> <span>Telefon</span>
+                      <Phone className="w-3.5 h-3.5 text-teal shrink-0" /> <span>Telefon</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => setConType('Video-Call')}
-                      className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Video-Call' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
+                      onClick={() => handleConTypeSelect('Video-Call')}
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 p-1.5 sm:p-3.5 rounded-xl border text-[11px] sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Video-Call' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
                     >
-                      <Video className="w-4 h-4 text-teal shrink-0" /> <span>Video-Call</span>
+                      <Video className="w-3.5 h-3.5 text-teal shrink-0" /> <span>Video-Call</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => setConType('Persönlich')}
-                      className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 p-2.5 sm:p-3.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Persönlich' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
+                      onClick={() => handleConTypeSelect('Persönlich')}
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 p-1.5 sm:p-3.5 rounded-xl border text-[11px] sm:text-sm font-bold transition-all cursor-pointer ${conType === 'Persönlich' ? 'bg-teal/10 border-teal text-teal-deep shadow-sm' : 'border-gray-200 hover:bg-cream/40'}`}
                     >
-                      <User className="w-4 h-4 text-teal shrink-0" /> <span>Persönlich</span>
+                      <User className="w-3.5 h-3.5 text-teal shrink-0" /> <span>Persönlich</span>
                     </button>
                   </div>
                   {formErrors.beratungsart && <p className="text-coral text-xs font-semibold mt-1">{formErrors.beratungsart}</p>}
@@ -559,6 +815,7 @@ export default function App() {
                     type="date"
                     value={dueDateString}
                     onChange={(e) => handleDueDateChange(e.target.value)}
+                    onFocus={() => { triggerFormStart(); triggerFormStepStart(1); }}
                     className="w-full bg-cream border border-gray-200 rounded-xl py-3 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
                   />
                   {formErrors.voraussichtlicher_geburtstermin && <p className="text-coral text-xs font-semibold mt-1">{formErrors.voraussichtlicher_geburtstermin}</p>}
@@ -576,6 +833,7 @@ export default function App() {
                       required
                       value={userEmail}
                       onChange={(e) => setUserEmail(e.target.value)}
+                      onFocus={() => { triggerFormStart(); triggerFormStepStart(1); }}
                       placeholder="beispiel@domain.ch"
                       className="w-full bg-cream border border-gray-200 rounded-xl py-3 pl-12 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
                     />
@@ -606,14 +864,14 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-3 max-w-xs">
                     <button
                       type="button"
-                      onClick={() => setAnrede('Frau')}
+                      onClick={() => { setAnrede('Frau'); triggerFormStepStart(2); }}
                       className={`py-2 px-4 rounded-xl border text-sm font-bold transition-all cursor-pointer text-center ${anrede === 'Frau' ? 'bg-teal text-white border-teal shadow-sm' : 'border-gray-200 text-teal-deep hover:bg-cream/40'}`}
                     >
                       Frau
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAnrede('Herr')}
+                      onClick={() => { setAnrede('Herr'); triggerFormStepStart(2); }}
                       className={`py-2 px-4 rounded-xl border text-sm font-bold transition-all cursor-pointer text-center ${anrede === 'Herr' ? 'bg-teal text-white border-teal shadow-sm' : 'border-gray-200 text-teal-deep hover:bg-cream/40'}`}
                     >
                       Herr
@@ -622,7 +880,7 @@ export default function App() {
                   {formErrors.anrede && <p className="text-coral text-xs font-semibold mt-1">{formErrors.anrede}</p>}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-teal-deep/80 uppercase tracking-wider mb-1">
                       Vorname: <span className="text-coral">*</span>
@@ -632,6 +890,7 @@ export default function App() {
                       required
                       value={vorname}
                       onChange={(e) => setVorname(e.target.value)}
+                      onFocus={() => triggerFormStepStart(2)}
                       placeholder="Julia"
                       className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
                     />
@@ -646,6 +905,7 @@ export default function App() {
                       required
                       value={nachname}
                       onChange={(e) => setNachname(e.target.value)}
+                      onFocus={() => triggerFormStepStart(2)}
                       placeholder="Müller"
                       className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
                     />
@@ -662,6 +922,7 @@ export default function App() {
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    onFocus={() => triggerFormStepStart(2)}
                     placeholder="+41 79 123 45 67"
                     className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
                   />
@@ -681,6 +942,7 @@ export default function App() {
                           required
                           value={strasse}
                           onChange={(e) => setStrasse(e.target.value)}
+                          onFocus={() => triggerFormStepStart(2)}
                           placeholder="Bahnhofstrasse 12"
                           className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
                         />
@@ -698,6 +960,7 @@ export default function App() {
                           required
                           value={plz}
                           onChange={(e) => setPlz(e.target.value)}
+                          onFocus={() => triggerFormStepStart(2)}
                           placeholder="8000"
                           className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-3 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold text-center"
                         />
@@ -714,6 +977,7 @@ export default function App() {
                             required
                             value={ort}
                             onChange={(e) => setOrt(e.target.value)}
+                            onFocus={() => triggerFormStepStart(2)}
                             placeholder="Zürich"
                             className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
                           />
@@ -734,6 +998,7 @@ export default function App() {
                         required
                         value={location}
                         onChange={(e) => setLocation(e.target.value)}
+                        onFocus={() => triggerFormStepStart(2)}
                         placeholder="St. Gallen (SG)"
                         className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal font-semibold"
                       />
@@ -749,6 +1014,7 @@ export default function App() {
                   <textarea
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
+                    onFocus={() => triggerFormStepStart(2)}
                     placeholder="Zusätzliche Fragen oder Wünsche..."
                     rows={2}
                     className="w-full bg-cream border border-gray-200 rounded-xl py-2.5 px-4 text-teal-deep focus:outline-none focus:ring-2 focus:ring-teal text-sm font-semibold"
@@ -763,6 +1029,7 @@ export default function App() {
                       id={`${isModal ? 'modal-' : ''}form-consent`}
                       checked={consent}
                       onChange={(e) => setConsent(e.target.checked)}
+                      onFocus={() => triggerFormStepStart(2)}
                       className="mt-1 w-4 h-4 text-teal border-gray-300 rounded focus:ring-teal cursor-pointer"
                     />
                     <label htmlFor={`${isModal ? 'modal-' : ''}form-consent`} className="text-[11px] text-teal-deep/70 leading-relaxed cursor-pointer select-none">
@@ -777,6 +1044,7 @@ export default function App() {
                       id={`${isModal ? 'modal-' : ''}form-marketing`}
                       checked={marketingEinwilligung}
                       onChange={(e) => setMarketingEinwilligung(e.target.checked)}
+                      onFocus={() => triggerFormStepStart(2)}
                       className="mt-1 w-4 h-4 text-teal border-gray-300 rounded focus:ring-teal cursor-pointer"
                     />
                     <label htmlFor={`${isModal ? 'modal-' : ''}form-marketing`} className="text-[11px] text-teal-deep/70 leading-relaxed cursor-pointer select-none">
@@ -796,7 +1064,7 @@ export default function App() {
                   <button
                     type="button"
                     disabled={submitStatus === 'loading'}
-                    onClick={() => setFormStep(1)}
+                    onClick={handleBackStep}
                     className="flex-1 bg-cream hover:bg-gray-100 text-teal-deep border border-gray-200 font-bold py-3.5 rounded-xl transition-all cursor-pointer text-xs disabled:opacity-50"
                   >
                     Zurück
@@ -873,7 +1141,7 @@ export default function App() {
     <div className="min-h-screen bg-cream font-sans selection:bg-coral selection:text-white relative pb-16 md:pb-0">
       
       {/* 1. Stichtag-Leiste oben */}
-      <div id="top-banner" className="bg-teal-deep text-white text-xs md:text-sm py-2 px-4 text-center font-medium border-b border-teal/10 tracking-wide z-50 relative">
+      <div id="top-banner" className="hidden md:block bg-teal-deep text-white text-xs md:text-sm py-2 px-4 text-center font-medium border-b border-teal/10 tracking-wide z-50 relative">
         <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 flex-wrap">
           <span className="inline-block w-2 h-2 rounded-full bg-coral animate-ping"></span>
           <span>
@@ -902,16 +1170,8 @@ export default function App() {
             Unabhängig · FINMA Nr. 35704
           </div>
 
-          {/* Primary Action Button */}
-          <div>
-            <button 
-              onClick={() => scrollToSection('vorsorge-form')}
-              className="bg-coral hover:bg-coral/90 text-white font-bold py-2.5 px-5 rounded-full shadow-md hover:shadow-lg transition-all text-xs sm:text-sm cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
-              id="header-cta"
-            >
-              Baby-Check sichern
-            </button>
-          </div>
+          {/* Clean spacer */}
+          <div className="w-4 md:w-0"></div>
         </div>
       </header>
 
@@ -943,15 +1203,7 @@ export default function App() {
               Meldest du dein Baby vor der Geburt an, kommt es <strong>ohne Gesundheitsprüfung</strong> in die guten Zusatzversicherungen. Halbprivat, privat, Komplementärmedizin, Zahn. Dazu <strong>bis zu CHF 3'500 Geburtspauschale</strong>. Nach der Geburt kann eine Gesundheitsprüfung genau das verhindern.
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <button
-                onClick={() => scrollToSection('vorteile')}
-                className="w-full sm:w-auto bg-coral hover:bg-coral/90 text-white font-bold text-sm sm:text-base py-3.5 sm:py-4 px-6 sm:px-8 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5 cursor-pointer"
-                id="hero-secondary-cta"
-              >
-                Was dein Baby bekommt <ArrowRight className="w-5 h-5" />
-              </button>
-            </div>
+
 
             {/* Trust Indicator */}
             <div className="flex items-center gap-3 text-sm text-teal-deep/70 pt-4">
@@ -1052,37 +1304,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Fruit comparison & Zodiac */}
-                {!isInvalidDate && (
-                  <div className="space-y-3 pt-3 border-t border-white/10 text-sm">
-                    {/* Fruit comparison */}
-                    <div className="flex items-center gap-3 bg-white/5 p-2 rounded-xl">
-                      <span className="text-2xl">{currentFruit.emoji}</span>
-                      <div>
-                        <span className="text-white/60 text-xs block font-medium">Dein Baby ist etwa so gross wie eine:</span>
-                        <span className="font-bold text-white text-sm">{currentFruit.fruit} <span className="text-white/60 font-normal">({currentFruit.size}, {currentFruit.weight})</span></span>
-                      </div>
-                    </div>
-                    
-                    {/* Zodiac */}
-                    <div className="flex items-center gap-3 bg-white/5 p-2 rounded-xl">
-                      <span className="text-2xl text-gold">{dynamicZodiac.icon}</span>
-                      <div>
-                        <span className="text-white/60 text-xs block font-medium">Sternzeichen des Babys:</span>
-                        <span className="font-bold text-white text-sm">
-                          {dynamicZodiac.name} <span className="text-gold/90 font-normal">({dynamicZodiac.personality})</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Urgency message */}
-                <div className={`p-4 rounded-xl border text-xs leading-relaxed transition-all ${urgencyBg}`}>
-                  <p className={urgencyTextClass}>
-                    {urgencyText}
-                  </p>
-                </div>
               </div>
 
               {/* Action Button */}
@@ -1684,6 +1905,69 @@ export default function App() {
             </div>
 
           </div>
+
+          {/* Google Rezensionen Einbindung */}
+          <div className="mt-16 pt-12 border-t border-teal/10">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+              <div>
+                <h3 className="text-xl font-bold text-teal-deep flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center bg-teal/10 text-teal p-1.5 rounded-lg">
+                    <Star className="w-5 h-5 fill-teal text-teal" />
+                  </span>
+                  Echte Google-Rezensionen für finwiwo
+                </h3>
+                <p className="text-sm text-teal-deep/60 mt-1">
+                  Direkt aus unserem Google My Business Profil für maximale Transparenz und ehrliches Feedback.
+                </p>
+              </div>
+              <a 
+                href="https://www.google.com/search?q=finwiwo&sca_esv=9b0458278ed03d87&hl=de&sxsrf=APpeQnsqBoRphQUk17R4Y91C-FXPug2Bsw%3A1784545922809&source=hp&ei=ggJeasO8LvrQi-gP55PxsQg&iflsig=ABILxe8AAAAAal4QklYy9cSIDBfd8h2AToemyghtPI2Y&ved=0ahUKEwjDhb_Oj-GVAxV66AIHHedJPIYQ4dUDCDo&uact=5&oq=finwiwo&gs_lp=Egdnd3Mtd2l6GgIYAyIHZmlud2l3bzILEC4YgAQYxwEYrwEyCBAAGIAEGIsDMggQABiABBiLAzIIEAAY7wUYiwMyCBAAGO8FGIsDMggQABjvBRiLAzILEAAYgAQYogQYiwNIowdQAFjTBnAAeACQAQCYAXGgAbcDqgEDNS4xuAEDyAEA-AEBmAIGoALEA8ICCxAuGIAEGLEDGIMBwgILEAAYgAQYsQMYgwHCAhEQLhiABBixAxiDARjHARjRA8ICDhAAGIAEGIoFGLEDGIMBwgIREAAYgAQYigUYjQYYsQMYgwHCAg4QABiABBixAxiDARiLA8ICBRAAGIAEwgIREC4YgAQYsQMYiwMYqAMYnQPCAhcQLhiABBixAxiDARiLAxiiBRioAxidA8ICERAAGIAEGIoFGLEDGIMBGIsDwgIIEAAYgAQYsQPCAg4QLhiABBixAxjHARjRA8ICBRAuGIAEwgIVEC4YgAQYChgLGLEDGIsDGJ4DGKgDwgIKEAAYgAQYChiLA8ICDhAuGIAEGIsDGO4FGKgDwgIUEC4YgAQYxwEYrwEYiwMYqAMYpgPCAgwQABiABBgKGAsYiwPCAhgQLhiABBgKGAsYxwEYrwEYiwMYqAMYpgPCAg8QLhiABBgKGAsYxwEYrwGYAwCSBwM1LjGgB55CsgcDNS4xuAfEA8IHBTEuNC4xyAcIgAgB&sclient=gws-wiz#lrd=0x479b1f0827e5128f:0x2f069cc00b1d6369,1,,,,"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-cream hover:bg-teal/5 text-teal text-sm font-semibold rounded-xl border border-teal/10 hover:border-teal/30 shadow-sm transition-all text-center group/btn"
+              >
+                <span className="text-red-500 font-bold">G</span>
+                <span className="text-blue-500 font-bold">o</span>
+                <span className="text-yellow-500 font-bold">o</span>
+                <span className="text-blue-500 font-bold">g</span>
+                <span className="text-green-500 font-bold">l</span>
+                <span className="text-red-500 font-bold">e</span>
+                <span className="text-teal-deep"> Rezensionen ansehen</span>
+                <ArrowRight className="w-4 h-4 ml-1 text-teal group-hover/btn:translate-x-1 transition-transform" />
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {FINWIWO_GOOGLE_REVIEWS.map((review, idx) => (
+                <div key={idx} className="bg-cream/30 rounded-2xl p-6 border border-teal/5 flex flex-col justify-between space-y-4 hover:shadow-md hover:border-teal/20 transition-all duration-300">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-0.5">
+                        {[...Array(review.rating)].map((_, i) => (
+                          <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                        ))}
+                      </div>
+                      <span className="text-xs text-teal-deep/40">{review.date}</span>
+                    </div>
+                    <p className="text-sm text-teal-deep/80 leading-relaxed italic font-normal">
+                      "{review.text}"
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 pt-3 border-t border-teal/5">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${review.avatarBg || 'bg-teal text-white'}`}>
+                      {review.author.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-teal-deep">{review.author}</div>
+                      <div className="text-[10px] text-teal-deep/50 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Verifizierte Google-Rezension
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </motion.section>
 
@@ -1865,17 +2149,17 @@ export default function App() {
             </div>
 
             {/* Right Column: Two-Step Interactive Form Card */}
-            <div className="lg:col-span-6">
+            <div className="lg:col-span-6 space-y-6">
               <div className="bg-white text-teal-deep rounded-3xl p-6 sm:p-8 shadow-2xl border border-teal/10 relative">
                 
                 {renderForm(false)}
 
-                {/* Privacy and lock icon */}
-                <div className="absolute -bottom-10 left-0 right-0 text-center flex items-center justify-center gap-1.5 text-xs text-white/70">
-                  <Lock className="w-3.5 h-3.5" />
-                  Deine Daten sind gemäss DSGVO/DSG der Schweiz absolut sicher verschlüsselt.
-                </div>
+              </div>
 
+              {/* Privacy and lock icon (relative below the card to prevent overlap on mobile) */}
+              <div className="text-center flex items-center justify-center gap-1.5 text-xs text-white/70">
+                <Lock className="w-3.5 h-3.5 text-gold shrink-0" />
+                <span>Deine Daten sind gemäss DSGVO/DSG der Schweiz absolut sicher verschlüsselt.</span>
               </div>
             </div>
 
@@ -1987,27 +2271,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* 15. Sticky Mobile CTA */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 shadow-2xl p-3 flex justify-between items-center z-40 animate-slideUp">
-        <div className="space-y-0.5 pl-2 text-teal-deep">
-          <div className="text-xs font-bold uppercase tracking-wider opacity-90 leading-none">
-            Baby absichern
-          </div>
-          <div className="text-[11px] font-semibold text-teal leading-none">
-            noch {isInvalidDate ? '20' : weeksRemaining} Wochen übrig
-          </div>
-        </div>
-        
-        <button
-          onClick={() => scrollToSection('vorsorge-form')}
-          className="bg-coral hover:bg-coral/95 text-white font-bold py-3 px-6 rounded-full shadow text-xs cursor-pointer tracking-wider uppercase transform active:scale-95 transition-all"
-          id="sticky-mobile-cta-btn"
-        >
-          Check sichern
-        </button>
-      </div>
-
-
       {/* 15. Legal Documents Modal */}
       <LegalModal 
         isOpen={legalModalOpen} 
@@ -2017,8 +2280,8 @@ export default function App() {
 
       {/* 17. Formular Overlay Modal */}
       {formModalOpen && (
-        <div className="fixed inset-0 bg-teal-deep/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative border border-teal/10 my-8">
+        <div className="fixed inset-0 bg-teal-deep/60 backdrop-blur-sm z-50 overflow-y-auto flex justify-center p-2 sm:p-4 items-start md:items-center">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-8 shadow-2xl relative border border-teal/10 my-auto my-4 sm:my-8">
             
             {/* Close Button */}
             <button 
