@@ -33,6 +33,14 @@ import { GenderType, StyleType, BabyName, ZodiacInfo } from './types';
 import LegalModal from './components/LegalModal';
 import { pushToDataLayer, TRACKING_FORM_NAME, normalizeConsultationType } from './utils/tracking';
 
+class ServerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ServerError';
+    Object.setPrototypeOf(this, ServerError.prototype);
+  }
+}
+
 // Anchor helper function
 const scrollToSection = (id: string) => {
   const element = document.getElementById(id);
@@ -240,6 +248,7 @@ export default function App() {
     lastStepViewedRef.current = step;
 
     const normalizedConType = normalizeConsultationType(conType) || 'phone';
+    const formStepVariant = normalizedConType === 'in_person' ? 'in_person' : 'default';
     
     if (step === 1) {
       pushToDataLayer({
@@ -257,7 +266,7 @@ export default function App() {
         form_name: TRACKING_FORM_NAME,
         form_step: 2,
         form_step_name: "contact_details",
-        form_step_variant: conType === 'Persönlich' ? "in_person" : "default",
+        form_step_variant: formStepVariant,
         consultation_type: normalizedConType,
         previous_step: 1
       });
@@ -274,7 +283,7 @@ export default function App() {
       form_location: window.location.pathname
     });
 
-    triggerFormStepView(1);
+    triggerFormStepView(formStep);
   };
 
   const triggerFormStart = () => {
@@ -289,6 +298,7 @@ export default function App() {
   };
 
   const triggerFormStepStart = (step: 1 | 2) => {
+    triggerFormView();
     if (stepStartTriggeredRef.current[step]) return;
     stepStartTriggeredRef.current[step] = true;
 
@@ -299,7 +309,7 @@ export default function App() {
       form_name: TRACKING_FORM_NAME,
       form_step: step,
       form_step_name: step === 1 ? "consultation_details" : "contact_details",
-      form_step_variant: step === 2 && conType === 'Persönlich' ? "in_person" : "default",
+      form_step_variant: step === 2 && normalizedConType === 'in_person' ? "in_person" : "default",
       consultation_type: normalizedConType
     });
   };
@@ -322,7 +332,7 @@ export default function App() {
         form_name: TRACKING_FORM_NAME,
         form_step: 2,
         form_step_name: "contact_details",
-        form_step_variant: conType === 'Persönlich' ? "in_person" : "default",
+        form_step_variant: normalizedConType === 'in_person' ? "in_person" : "default",
         consultation_type: normalizedConType,
         next_step: null
       });
@@ -341,6 +351,9 @@ export default function App() {
           field_name = "birth_date";
         } else if (fieldKey === 'email') {
           field_name = "email";
+          if (userEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) {
+            error_type = "invalid_format";
+          }
         }
       } else {
         if (fieldKey === 'anrede') {
@@ -534,7 +547,11 @@ export default function App() {
     if (!dueDateString) {
       errors.voraussichtlicher_geburtstermin = 'Bitte gib den voraussichtlichen Geburtstermin an.';
     }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!userEmail) {
+      errors.email = 'Bitte trage eine gültige E-Mail-Adresse ein.';
+    } else if (!emailRegex.test(userEmail)) {
       errors.email = 'Bitte trage eine gültige E-Mail-Adresse ein.';
     }
     
@@ -704,7 +721,7 @@ export default function App() {
             ? responseData.diagnosticMessage
             : null;
 
-        throw new Error(
+        throw new ServerError(
           [
             serverMessage,
             diagnosticStage ? `Stufe: ${diagnosticStage}` : null,
@@ -736,12 +753,14 @@ export default function App() {
       console.error('Fehler bei der API-Formularübermittlung:', errorMessage);
       setSubmitStatus('error');
 
-      pushToDataLayer({
-        event: "form_submit_error",
-        form_name: TRACKING_FORM_NAME,
-        consultation_type: normalizedConType,
-        error_type: "network_error"
-      });
+      if (!(error instanceof ServerError)) {
+        pushToDataLayer({
+          event: "form_submit_error",
+          form_name: TRACKING_FORM_NAME,
+          consultation_type: normalizedConType,
+          error_type: "network_error"
+        });
+      }
     }
   };
 
@@ -757,7 +776,7 @@ export default function App() {
         )}
 
         {!formSubmitted ? (
-          <form onSubmit={formStep === 1 ? handleNextStep : handleFormSubmit} className="space-y-5">
+          <form noValidate onSubmit={formStep === 1 ? handleNextStep : handleFormSubmit} className="space-y-5">
             
             {/* Step Indicators */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4">
@@ -1433,9 +1452,14 @@ export default function App() {
             <h3 className="text-lg font-bold font-display text-teal-deep mb-3">
               bis zu CHF 3'500 Geburtspauschale
             </h3>
-            <p className="text-sm text-teal-deep/70 leading-relaxed">
-              Eine wertvolle finanzielle Unterstützung direkt rund um die Geburt, zum Beispiel über das CSS Spital Baby. Gilt überall dort, wo das entsprechende Produkt zur Verfügung steht.
-            </p>
+            <div className="text-sm text-teal-deep/70 leading-relaxed space-y-3">
+              <p>
+                Eine wertvolle finanzielle Unterstützung direkt rund um die Geburt, zum Beispiel über das CSS Spital Baby. Gilt überall dort, wo das entsprechende Produkt zur Verfügung steht.
+              </p>
+              <p>
+                Sicher dir diese Pauschale rechtzeitig: Für Geburten gilt eine Karenzfrist von 10 Monaten. Frauen zwischen 17 und 39 Jahren schliessen das Produkt einfach und bequem gemeinsam im Paar- oder Familientarif ab.
+              </p>
+            </div>
           </div>
 
           {/* Card 2: Halbprivat/Privat */}
